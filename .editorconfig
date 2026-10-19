@@ -1,0 +1,28 @@
+﻿# Padrão de formatação do Cadeira Livre.
+# Lido automaticamente pelo VS Code e pela maioria dos editores.
+root = true
+
+# Regras gerais para todos os arquivos
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Java (Spring Boot): 4 espaços, padrão da comunidade Java
+[*.java]
+indent_style = space
+indent_size = 4
+
+# React, HTML, CSS, JSON, YAML e configurações: 2 espaços
+[*.{js,jsx,ts,tsx,html,css,json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+# Markdown: espaços no fim da linha podem ser quebras de linha, então não são removidos
+[*.md]
+trim_trailing_whitespace = false
+
+# Scripts do Windows mantêm quebra de linha CRLF, conforme o .gitattributes
+[*.{bat,ps1}]
+end_of_line = crlf
