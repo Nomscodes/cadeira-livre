@@ -1,0 +1,11 @@
+﻿# Responsáveis pela revisão de cada parte do repositório.
+# Quando a proteção da branch exigir revisão de responsável, o GitHub pede
+# aprovação destes usuários para as alterações nos caminhos listados.
+
+*                    @Nomscodes
+/backend/            @GabrielNaokiUT
+/database/           @GabrielNaokiUT
+/frontend/           @wyllianmn
+/docs/diagramas/     @Caio4breu
+/docs/interface/     @Caio4breu
+/.github/            @Nomscodes
