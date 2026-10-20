@@ -1,0 +1,313 @@
+openapi: 3.0.3
+info:
+  title: Cadeira Livre API
+  version: 0.1.0-rascunho
+  description: |
+    Contrato RASCUNHO derivado do que o front consome hoje (src/mocks/handlers.js).
+    O backend Spring Boot deve implementar estes caminhos; qualquer mudanca de formato
+    precisa ser combinada com quem mantem o front. Base: http://localhost:8080/api
+    Datas em ISO (YYYY-MM-DD), horas em HH:mm, valores em reais (number).
+servers:
+  - url: http://localhost:8080/api
+components:
+  securitySchemes:
+    staff:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Responsavel ou funcionario (login com e-mail e senha).
+    cliente:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Acesso temporario do cliente (codigo por WhatsApp ou e-mail).
+  responses:
+    Erro:
+      description: Erro. O front exibe o campo message ao usuario.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string, example: Esse horario acabou de ser ocupado. }
+              problemas: { type: array, items: { type: string } }
+  schemas:
+    Sessao:
+      type: object
+      properties:
+        token: { type: string }
+        usuario:
+          type: object
+          properties:
+            id: { type: string }
+            nome: { type: string }
+            papel: { type: string, enum: [administrador, funcionario] }
+            salaoId: { type: string }
+            profissionalId: { type: string }
+    Servico:
+      type: object
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        preco: { type: number }
+        duracao: { type: integer, description: minutos }
+        profissionalIds: { type: array, items: { type: string } }
+        destaque: { type: boolean }
+    Combo:
+      type: object
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        servicoIds: { type: array, items: { type: string } }
+        preco: { type: number }
+        duracao: { type: integer, description: soma dos servicos (calculado pelo servidor) }
+        profissionalIds: { type: array, items: { type: string } }
+    Profissional:
+      type: object
+      properties:
+        id: { type: string }
+        nome: { type: string }
+        nomeSocial: { type: string, description: exibido aos clientes }
+        whatsapp: { type: string }
+        encaminhar: { type: boolean }
+        atende: { type: boolean, description: 'false = nao atende clientes (ex.: administrador que so gerencia): sai do portal, dos horarios e dos vinculos com servicos; nao pode ser agendado' }
+        ehAdmin: { type: boolean, description: 'somente na listagem do painel' }
+        servicoIds: { type: array, items: { type: string } }
+        horarios: { $ref: '#/components/schemas/Semana' }
+    Semana:
+      type: object
+      description: 'Horario por dia da semana. Chaves "0" a "6" (0 = domingo). Vale para o salao (funcionamento) e para cada profissional (trabalho).'
+      example: { '0': { ativo: false, inicio: '09:00', fim: '18:00' }, '1': { ativo: true, inicio: '09:00', fim: '18:00' } }
+      additionalProperties:
+        type: object
+        properties:
+          ativo: { type: boolean }
+          inicio: { type: string, example: '09:00' }
+          fim: { type: string, example: '18:00' }
+    Portal:
+      type: object
+      description: Pagina publica do salao. Se publico=false, so slug, nome, temaId e publico sao devolvidos.
+      properties:
+        slug: { type: string }
+        nome: { type: string }
+        temaId: { type: string, example: azul-escuro, description: um dos 14 ids (ver README) }
+        publico: { type: boolean }
+        logo: { type: string, nullable: true, description: data URL ou URL }
+        galeria: { type: array, items: { type: string } }
+        sobre: { type: string }
+        whatsapp: { type: string }
+        cidade: { type: string }
+        endereco: { type: string }
+        categoria: { type: string, enum: [barbearia, salão de beleza, unhas] }
+        capa: { type: string, nullable: true, description: 'imagem de capa (data URL ou URL); aparece ao redor do botao Agendar horario' }
+        horarios: { $ref: '#/components/schemas/Semana' }
+        redes: { type: string }
+        atendimento: { type: string, enum: [local, domicilio] }
+        cancelamentoHoras: { type: integer }
+        servicos: { type: array, items: { $ref: '#/components/schemas/Servico' } }
+        combos: { type: array, items: { $ref: '#/components/schemas/Combo' } }
+        profissionais:
+          type: array
+          items: { type: object, properties: { id: { type: string }, nome: { type: string }, servicoIds: { type: array, items: { type: string } }, horarios: { $ref: '#/components/schemas/Semana' } } }
+    ItemAgendamento:
+      type: object
+      description: Informe servicoId OU comboId, sempre com o profissional escolhido.
+      properties:
+        servicoId: { type: string }
+        comboId: { type: string }
+        profissionalId: { type: string }
+paths:
+  /auth/login:
+    post:
+      summary: 'Entrar (responsavel ou funcionario)'
+      description: 'O cargo NAO e informado pelo formulario: o servidor devolve usuario.papel conforme o cadastro do usuario e o front redireciona por ele (administrador para /painel, funcionario para /agenda). Qualquer "papel" enviado no corpo deve ser ignorado.'
+      requestBody: { content: { application/json: { schema: { type: object, properties: { email: { type: string }, senha: { type: string } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Sessao' } } } }, '401': { $ref: '#/components/responses/Erro' } }
+  /auth/cadastro:
+    post:
+      summary: Cria conta de responsavel e o salao (oculto)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { nome: { type: string }, razaoSocial: { type: string }, documento: { type: string }, email: { type: string }, atuacao: { type: string, enum: [autonomo, equipe] }, senha: { type: string, minLength: 8 } } } } } }
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Sessao' } } } }, '409': { $ref: '#/components/responses/Erro' }, '422': { $ref: '#/components/responses/Erro' } }
+  /auth/recuperar:
+    post: { summary: Envia codigo de recuperacao por e-mail (404 se nao cadastrado), responses: { '204': { description: ok }, '404': { $ref: '#/components/responses/Erro' } } }
+  /auth/recuperar/codigo:
+    post: { summary: Confere o codigo, responses: { '204': { description: ok }, '422': { $ref: '#/components/responses/Erro' } } }
+  /auth/recuperar/redefinir:
+    post: { summary: Define a nova senha (email, codigo, novaSenha), responses: { '204': { description: ok }, '422': { $ref: '#/components/responses/Erro' } } }
+  /acesso/codigo:
+    post: { summary: 'Cliente: envia codigo (canal: whatsapp ou email, contato)', responses: { '204': { description: ok } } }
+  /acesso/confirmar:
+    post:
+      summary: 'Cliente: confirma o codigo e recebe token temporario'
+      responses: { '200': { description: ok, content: { application/json: { schema: { type: object, properties: { token: { type: string }, contato: { type: string } } } } } }, '422': { $ref: '#/components/responses/Erro' } }
+  /saloes:
+    get:
+      summary: Busca de saloes publicos
+      description: 'cidade compara o INICIO do nome da cidade (goiania nao pode listar Aparecida de Goiania). categoria "todas" nao filtra.'
+      parameters:
+        - { name: cidade, in: query, schema: { type: string } }
+        - { name: categoria, in: query, schema: { type: string } }
+        - { name: servico, in: query, schema: { type: string } }
+        - { name: nome, in: query, schema: { type: string } }
+      responses: { '200': { description: 'lista de { id, slug, nome, cidade, categoria, temaId, logo }' } }
+  /saloes/{slug}:
+    get:
+      summary: Portal publico
+      description: 404 se nao existe. 200 com publico=false se o salao esta oculto.
+      parameters: [{ name: slug, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: ok, content: { application/json: { schema: { $ref: '#/components/schemas/Portal' } } } }, '404': { $ref: '#/components/responses/Erro' } }
+  /saloes/{slug}/disponibilidade/dias:
+    get:
+      summary: Estado de cada dia do mes para os profissionais escolhidos
+      description: 'estado: passado | bloqueado (bloqueio geral, com motivo) | fechado (salao nao abre nesse dia da semana) | folga (algum profissional nao atende: dia da semana ou folga) | lotado | ok'
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: mes, in: query, required: true, schema: { type: string, example: 2026-10 } }
+        - { name: profissionais, in: query, required: true, schema: { type: string, example: 'p1,p2' } }
+        - { name: duracao, in: query, required: true, schema: { type: integer } }
+      responses: { '200': { description: 'lista de { data, estado, motivo? }' } }
+  /saloes/{slug}/disponibilidade/horarios:
+    get:
+      summary: Horarios de inicio do dia (livre true/false)
+      description: 'Passo de 30 min. A janela de cada profissional e a INTERSECCAO entre o horario do salao e o dele naquele dia da semana, sem folga nem bloqueio geral. O bloco de duracao minutos precisa caber para TODOS os profissionais. Nao oferece almoco (12:00 a 13:00 no mock) nem horario passado.'
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+        - { name: data, in: query, required: true, schema: { type: string } }
+        - { name: profissionais, in: query, required: true, schema: { type: string } }
+        - { name: duracao, in: query, required: true, schema: { type: integer } }
+      responses: { '200': { description: 'lista de { hora, livre }' } }
+  /saloes/{slug}/agendamentos:
+    post:
+      summary: Cria agendamento (cliente nao precisa estar autenticado)
+      description: 'Revalidar a disponibilidade NA TRANSACAO (RF21). 409 se o horario foi ocupado. Se houver token de cliente, associar o agendamento a ele. Recusar (422) profissional com atende=false. Gera notificacao tipo agendamento para o administrador e para cada profissional envolvido.'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                itens: { type: array, items: { $ref: '#/components/schemas/ItemAgendamento' } }
+                data: { type: string }
+                hora: { type: string }
+                clienteNome: { type: string }
+                clienteWhats: { type: string }
+      responses: { '200': { description: 'ok: { id, salao: { nome, endereco, whatsapp } }' }, '409': { $ref: '#/components/responses/Erro' }, '422': { $ref: '#/components/responses/Erro' } }
+  /cliente/agendamentos:
+    get:
+      security: [{ cliente: [] }]
+      summary: Historico do cliente (todos os saloes)
+      responses: { '200': { description: 'lista de { id, status, servicos, profissionais, data, hora, valor, avaliado, salao{nome,slug,temaId,whatsapp}, podeCancelar, cancelamentoHoras }' } }
+  /cliente/agendamentos/{id}:
+    get: { security: [{ cliente: [] }], summary: Detalhe (mesmo formato do item da lista), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: ok } } }
+  /cliente/agendamentos/{id}/cancelar:
+    post:
+      security: [{ cliente: [] }]
+      summary: 'Cancela se faltar mais que cancelamentoHoras. Gera notificacao tipo cancelamento para o administrador e para os profissionais envolvidos'
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: ok }, '422': { $ref: '#/components/responses/Erro' } }
+  /cliente/agendamentos/{id}/avaliacao:
+    post:
+      security: [{ cliente: [] }]
+      summary: 'Avalia atendimento concluido (nota 1 a 5, comentario). Uma vez por atendimento.'
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '204': { description: ok }, '409': { $ref: '#/components/responses/Erro' }, '422': { $ref: '#/components/responses/Erro' } }
+  /painel/portal:
+    get: { security: [{ staff: [] }], summary: Dados completos do portal do salao (so administrador), responses: { '200': { description: ok } } }
+    put: { security: [{ staff: [] }], summary: 'Salva portal (nome, temaId, sobre, whatsapp, categoria, cidade, endereco, redes, adminIds, logo, capa, galeria). O horario de funcionamento NAO vai aqui: tem endpoint proprio', responses: { '200': { description: ok } } }
+  /painel/portal/validar-publicacao:
+    post: { security: [{ staff: [] }], summary: 'Regra de publicacao. Devolve { ok, problemas[] }. Conta apenas profissionais que atendem clientes', responses: { '200': { description: ok } } }
+  /painel/portal/publicacao:
+    put: { security: [{ staff: [] }], summary: 'Liga/desliga o portal publico { publico }. 422 com problemas[] se a regra falhar', responses: { '200': { description: ok }, '422': { $ref: '#/components/responses/Erro' } } }
+  /painel/agendamentos:
+    get: { security: [{ staff: [] }], summary: 'Agendamentos do salao. status: confirmado | finalizado | cancelado. profissionalIds[] ajuda o calendario a contar por profissional. encaminhar[] lista profissionais com WhatsApp ativo', responses: { '200': { description: ok } } }
+  /painel/servicos:
+    get: { security: [{ staff: [] }], summary: 'Devolve { servicos, combos, profissionais }', responses: { '200': { description: ok } } }
+    post: { security: [{ staff: [] }], summary: Cria servico, responses: { '200': { description: ok }, '422': { $ref: '#/components/responses/Erro' } } }
+  /painel/servicos/{id}:
+    put: { security: [{ staff: [] }], summary: Edita servico (e vinculos com profissionais), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: ok } } }
+    delete: { security: [{ staff: [] }], summary: Exclui servico (remove dos combos e dos profissionais), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok } } }
+  /painel/combos:
+    post: { security: [{ staff: [] }], summary: 'Cria combo (min. 2 servicos, preco > 0)', responses: { '200': { description: ok }, '422': { $ref: '#/components/responses/Erro' } } }
+  /painel/combos/{id}:
+    put: { security: [{ staff: [] }], summary: Edita combo, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: ok } } }
+    delete: { security: [{ staff: [] }], summary: Exclui combo, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok } } }
+  /painel/profissionais:
+    get: { security: [{ staff: [] }], summary: 'Devolve { profissionais, servicos }', responses: { '200': { description: ok } } }
+    post: { security: [{ staff: [] }], summary: 'Cria profissional. Devolve { profissional, convite }. Nasce com horario de segunda a sexta, 09:00 as 18:00 (ajuste em /painel/horarios)', responses: { '200': { description: ok } } }
+  /painel/profissionais/{id}:
+    put: { security: [{ staff: [] }], summary: Edita profissional, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '200': { description: ok } } }
+    delete: { security: [{ staff: [] }], summary: 'Remove (422 se for o unico administrador)', parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok }, '422': { $ref: '#/components/responses/Erro' } } }
+  /painel/bloqueios:
+    get: { security: [{ staff: [] }], summary: 'Bloqueios gerais do mes (query mes=YYYY-MM)', responses: { '200': { description: 'lista de { data, motivo }' } } }
+  /painel/bloqueios/{data}:
+    put: { security: [{ staff: [] }], summary: 'Bloqueia o dia para todos { motivo }', parameters: [{ name: data, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok } } }
+    delete: { security: [{ staff: [] }], summary: Remove bloqueio, parameters: [{ name: data, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok } } }
+  /painel/configuracoes:
+    put: { security: [{ staff: [] }], summary: '{ atendimento, cancelamentoHoras (0 a 72), funcionariosEditamHorario }', responses: { '204': { description: ok } } }
+  /painel/configuracoes/transferir-admin:
+    post: { security: [{ staff: [] }], summary: 'Transfere o cargo { profissionalId }. Quem transfere vira funcionario', responses: { '204': { description: ok } } }
+  /painel/senha:
+    post: { security: [{ staff: [] }], summary: 'Troca senha { atual, nova }', responses: { '204': { description: ok }, '422': { $ref: '#/components/responses/Erro' } } }
+  /painel/dados:
+    delete: { security: [{ staff: [] }], summary: 'Apaga servicos, combos, bloqueios e agendamentos; oculta o portal', responses: { '204': { description: ok } } }
+  /painel/conta:
+    delete: { security: [{ staff: [] }], summary: Encerra a conta e remove todos os dados do salao, responses: { '204': { description: ok } } }
+  /notificacoes:
+    get:
+      security: [{ staff: [] }]
+      summary: 'Notificacoes do usuario logado (administrador e funcionario recebem as suas)'
+      description: 'Lista de { id, tipo, titulo, texto, criadaEm (ISO), lida, remetente, detalhes{cliente,servicos,profissionais,data,hora}|null, acoes[{id,rotulo,usada}] }. tipo: agendamento | lembrete | cancelamento | avaliacao | alerta | aviso. Os tipos agendamento e cancelamento nascem de eventos (novo agendamento, cancelamento do cliente) e vao ao administrador e a cada profissional envolvido. As acoes sao decididas pelo servidor conforme o cargo e o tipo: o funcionario nunca recebe acoes (apenas le); o administrador recebe "aviso" (enviar aviso a equipe) em lembrete, cancelamento e alerta, e "avaliacao" (pedir avaliacao ao cliente) somente no tipo avaliacao.'
+      responses: { '200': { description: ok } }
+  /notificacoes/{id}/lida:
+    post: { security: [{ staff: [] }], summary: Marca como lida (o front chama ao abrir o modal), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok } } }
+  /notificacoes/{id}/acao:
+    post:
+      security: [{ staff: [] }]
+      summary: 'Executa uma acao da notificacao (so administrador)'
+      description: 'Corpo { acao: "aviso" | "avaliacao", mensagem?, profissionalIds? }. "aviso" cria uma notificacao tipo aviso para cada profissional informado (exceto o proprio remetente); 422 se a mensagem estiver vazia ou nao houver destinatario. "avaliacao" envia o link de avaliacao ao cliente e marca a acao como usada. Devolve { enviados }.'
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: ok }, '403': { $ref: '#/components/responses/Erro' }, '422': { $ref: '#/components/responses/Erro' } }
+  /painel/horarios:
+    get: { security: [{ staff: [] }], summary: 'Horario de funcionamento do salao e horario de cada profissional (inclui o administrador se ele atende). Devolve { salao{horarios}, profissionais[{id,nome,ehAdmin,horarios}], avisos[] }', responses: { '200': { description: ok } } }
+  /painel/horarios/salao:
+    put:
+      security: [{ staff: [] }]
+      summary: 'Salva o horario de funcionamento { horarios } (7 dias, pelo menos 1 ativo; inicio < fim)'
+      description: 'Devolve { avisos[] } com conflitos entre o salao e a equipe (ex.: profissional trabalha num dia em que o salao fecha). Agendamentos ja marcados nao sao cancelados.'
+      responses: { '200': { description: ok }, '422': { $ref: '#/components/responses/Erro' } }
+  /painel/horarios/profissionais/{id}:
+    put:
+      security: [{ staff: [] }]
+      summary: 'Salva o horario de trabalho de um profissional { horarios } (pode ficar sem nenhum dia ativo)'
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: 'ok: { avisos[] }' }, '404': { $ref: '#/components/responses/Erro' }, '422': { $ref: '#/components/responses/Erro' } }
+  /painel/folgas:
+    get:
+      security: [{ staff: [] }]
+      summary: 'Folgas por data do mes (query mes=YYYY-MM, profissionalId opcional)'
+      responses: { '200': { description: 'lista de { profissionalId, data, motivo }' } }
+  /painel/folgas/{profissionalId}/{data}:
+    put: { security: [{ staff: [] }], summary: 'Registra a folga de um profissional num dia { motivo }. Nao cancela agendamentos ja marcados', parameters: [{ name: profissionalId, in: path, required: true, schema: { type: string } }, { name: data, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok } } }
+    delete: { security: [{ staff: [] }], summary: Remove a folga, parameters: [{ name: profissionalId, in: path, required: true, schema: { type: string } }, { name: data, in: path, required: true, schema: { type: string } }], responses: { '204': { description: ok } } }
+  /agenda:
+    get:
+      security: [{ staff: [] }]
+      summary: Agenda do funcionario logado
+      parameters: [{ name: mes, in: query, schema: { type: string, example: 2026-10 } }]
+      responses: { '200': { description: 'ok: { profissional{id,nome,horarios}, salaoHorarios, podeEditar, agendamentos[{id,data,hora,duracao,cliente,servicos,colegas[]}], descansos[{data,hora}], bloqueios[{data,motivo}], folgas[{data,motivo}] }. podeEditar vem da configuracao do administrador (funcionariosEditamHorario)' } }
+  /agenda/resumo:
+    get:
+      security: [{ staff: [] }]
+      summary: 'Perfil, cor do salao e indicadores do funcionario logado'
+      description: 'Devolve { profissional{id,nome,nomeSocial,whatsapp,horarios,servicos[]}, salao{nome,temaId}, indicadores{hoje, proximos7, concluidosMes, proximo{data,hora,cliente,servicos}|null} }. Sem valores financeiros: o funcionario nao ve faturamento.'
+      responses: { '200': { description: ok } }
+  /agenda/agendamentos:
+    get:
+      security: [{ staff: [] }]
+      summary: 'Todos os agendamentos do funcionario logado (futuros, realizados e cancelados)'
+      description: 'Lista de { id, data, hora, duracao, cliente, servicos, colegas[], status }. status: confirmado | finalizado | cancelado (derivado do horario, como em /painel/agendamentos). O front agrupa em abas e ordena.'
+      responses: { '200': { description: ok } }
+  /agenda/descansos:
+    put: { security: [{ staff: [] }], summary: 'Marca/desmarca descanso { data, hora, descanso }. 403 se o administrador nao liberou em Configuracoes (a unica forma de liberar no sistema final)', responses: { '204': { description: ok }, '403': { $ref: '#/components/responses/Erro' } } }
+  /agenda/alertas:
+    post: { security: [{ staff: [] }], summary: 'Funcionario alerta o responsavel sobre um cliente { agendamentoId, motivo, descricao }. Gera uma notificacao tipo alerta para o administrador', responses: { '204': { description: ok } } }
