@@ -1,0 +1,12 @@
+# NOVO: valores SOMENTE para desenvolvimento local (não usar em produção)
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/cadeira_livre
+    username: cadeira
+    password: cadeira
+  jpa:
+    show-sql: true
+
+app:
+  jwt:
+    secret: dev-only-secret-troque-em-producao-min-32-bytes
