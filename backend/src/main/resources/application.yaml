@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: cadeira-livre-api
+  # NOVO: perfil dev por padrão (valores locais em application-dev.yaml)
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  # NOVO: conexão com o PostgreSQL (em produção vem de variáveis de ambiente)
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none        # o schema é de responsabilidade do Flyway (db/migration)
+  flyway:
+    enabled: true
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /api      # NOVO: o OpenAPI assume base /api
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiracao-minutos: 1440 # 24h (seção 7 do documento)
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
