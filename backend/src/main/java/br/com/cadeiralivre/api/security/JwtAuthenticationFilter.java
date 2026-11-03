@@ -47,8 +47,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (barbeariaId != null) TenantContext.set(UUID.fromString(barbeariaId));
             }
         } catch (JwtException | IllegalArgumentException e) {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Token inválido ou expirado.");
-            return;
+            // Token inválido ou expirado: a requisição segue sem usuário logado.
+            // Rota pública funciona normal; rota protegida recebe 401 do SecurityConfig.
+            SecurityContextHolder.clearContext();
+            TenantContext.clear();
         }
 
         try {
