@@ -11,7 +11,6 @@
 	<groupId>br.com.cadeiralivre</groupId>
 	<artifactId>cadeira-livre-api</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<!-- ALTERADO: no zip a tag estava como <n>; o correto do Maven é <name> -->
 	<name>Cadeira Livre</name>
 	<description>API da plataforma SaaS de agendamento para barbearias</description>
 	<url/>
@@ -29,7 +28,7 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
-		<!-- NOVO: versões fora do BOM do Spring Boot -->
+		<!-- versões que o Spring Boot não gerencia -->
 		<jjwt.version>0.12.6</jjwt.version>
 		<springdoc.version>3.0.0</springdoc.version>
 	</properties>
@@ -43,7 +42,7 @@
 			<artifactId>spring-boot-starter-webmvc</artifactId>
 		</dependency>
 
-		<!-- NOVO: persistência (JPA + PostgreSQL + migrations) -->
+		<!-- banco de dados: JPA, PostgreSQL e Flyway -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -62,7 +61,7 @@
 			<artifactId>flyway-database-postgresql</artifactId>
 		</dependency>
 
-		<!-- NOVO: segurança (Spring Security + JWT) -->
+		<!-- segurança: Spring Security e JWT -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-security</artifactId>
@@ -85,7 +84,7 @@
 			<scope>runtime</scope>
 		</dependency>
 
-		<!-- NOVO: documentação da API (Swagger UI) -->
+		<!-- documentação da API (Swagger) -->
 		<dependency>
 			<groupId>org.springdoc</groupId>
 			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
