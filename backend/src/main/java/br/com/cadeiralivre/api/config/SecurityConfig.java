@@ -2,7 +2,6 @@ package br.com.cadeiralivre.api.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -13,11 +12,11 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import br.com.cadeiralivre.api.security.JwtAuthenticationFilter;
 import br.com.cadeiralivre.api.security.JwtService;
+import br.com.cadeiralivre.api.security.RespostaErroJson;
 import br.com.cadeiralivre.api.usuario.UsuarioRepository;
 
 /** Regras de acesso por rota. Sessão stateless: quem identifica o usuário é o JWT. */
@@ -31,9 +30,15 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .cors(Customizer.withDefaults())
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .exceptionHandling(e -> e.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
+            .exceptionHandling(e -> e
+                // sem login (ou token inválido) em rota protegida
+                .authenticationEntryPoint((request, response, ex) ->
+                        RespostaErroJson.escrever(response, 401, "Faça login para continuar."))
+                // logado, mas sem permissão para a rota (ex.: cliente tentando acessar o painel)
+                .accessDeniedHandler((request, response, ex) ->
+                        RespostaErroJson.escrever(response, 403, "Você não tem permissão para acessar este recurso.")))
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/auth/**", "/saloes/**",
+                .requestMatchers("/auth/**", "/saloes/**", "/error",
                         "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/painel/**").hasRole("DONO")
                 .anyRequest().authenticated())
