@@ -1,7 +1,7 @@
-# NOVO: valores SOMENTE para desenvolvimento local (não usar em produção)
+# Configuração só para desenvolvimento local. Não usar em produção.
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/cadeira_livre
+    url: jdbc:postgresql://localhost:5433/cadeira_livre
     username: cadeira
     password: cadeira
   jpa:
