@@ -1,6 +1,7 @@
 package br.com.cadeiralivre.api.security;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
@@ -23,15 +24,18 @@ public class JwtService {
 
     private final SecretKey key;
     private final long expiracaoMinutos;
+    private final Clock clock;
 
     public JwtService(@Value("${app.jwt.secret}") String secret,
-                      @Value("${app.jwt.expiracao-minutos}") long expiracaoMinutos) {
+                      @Value("${app.jwt.expiracao-minutos}") long expiracaoMinutos,
+                      Clock clock) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expiracaoMinutos = expiracaoMinutos;
+        this.clock = clock;
     }
 
     public String gerar(UUID usuarioId, Papel papel, UUID barbeariaId) {
-        Instant agora = Instant.now();
+        Instant agora = Instant.now(clock);
         JwtBuilder builder = Jwts.builder()
                 .subject(usuarioId.toString())
                 .claim("papel", papel.name())
@@ -43,6 +47,11 @@ public class JwtService {
 
     /** Lança JwtException se o token for inválido ou estiver expirado. */
     public Claims validar(String token) {
-        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+        return Jwts.parser()
+                .verifyWith(key)
+                .clock(() -> Date.from(clock.instant()))  // usa o mesmo relógio da geração
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }

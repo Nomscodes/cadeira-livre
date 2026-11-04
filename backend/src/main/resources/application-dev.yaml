@@ -10,3 +10,5 @@ spring:
 app:
   jwt:
     secret: dev-only-secret-troque-em-producao-min-32-bytes
+  cripto:
+    chave: YNb3r+rU2emI33dmaQ3JP/fkJzH9fARI+bCr+o++VCg=

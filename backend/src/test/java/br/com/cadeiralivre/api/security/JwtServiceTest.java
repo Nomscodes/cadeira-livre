@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
@@ -17,7 +20,10 @@ class JwtServiceTest {
 
     private static final String CHAVE = "chave-de-teste-com-pelo-menos-32-caracteres";
 
-    private final JwtService jwtService = new JwtService(CHAVE, 60);
+    // "agora" fixo nos testes
+    private final Clock agora = Clock.fixed(Instant.parse("2026-11-10T12:00:00Z"), ZoneOffset.UTC);
+
+    private final JwtService jwtService = new JwtService(CHAVE, 60, agora);
 
     @Test
     void tokenDeDonoGuardaUsuarioPapelEBarbearia() {
@@ -41,19 +47,19 @@ class JwtServiceTest {
 
     @Test
     void tokenAssinadoComOutraChaveEhRecusado() {
-        JwtService outroServidor = new JwtService("outra-chave-secreta-com-mais-de-32-caracteres", 60);
+        JwtService outroServidor = new JwtService("outra-chave-secreta-com-mais-de-32-caracteres", 60, agora);
         String tokenFalso = outroServidor.gerar(UUID.randomUUID(), Papel.DONO, UUID.randomUUID());
 
         assertThrows(JwtException.class, () -> jwtService.validar(tokenFalso));
     }
 
     @Test
-    void tokenExpiradoEhRecusado() {
-        // expiração negativa: o token já nasce vencido
-        JwtService geraTokenVencido = new JwtService(CHAVE, -1);
-        String tokenVencido = geraTokenVencido.gerar(UUID.randomUUID(), Papel.CLIENTE, null);
+    void tokenGeradoOntemJaVenceu() {
+        // token de 60 minutos gerado 24 horas antes do "agora"
+        Clock ontem = Clock.fixed(Instant.parse("2026-11-09T12:00:00Z"), ZoneOffset.UTC);
+        String tokenDeOntem = new JwtService(CHAVE, 60, ontem).gerar(UUID.randomUUID(), Papel.CLIENTE, null);
 
-        assertThrows(ExpiredJwtException.class, () -> jwtService.validar(tokenVencido));
+        assertThrows(ExpiredJwtException.class, () -> jwtService.validar(tokenDeOntem));
     }
 
     @Test

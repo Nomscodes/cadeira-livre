@@ -6,18 +6,16 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 import br.com.cadeiralivre.api.security.JwtAuthenticationFilter;
 import br.com.cadeiralivre.api.security.JwtService;
 import br.com.cadeiralivre.api.security.RespostaErroJson;
-import br.com.cadeiralivre.api.usuario.UsuarioRepository;
 
 /** Regras de acesso por rota. Sessão stateless: quem identifica o usuário é o JWT. */
 @Configuration
@@ -51,11 +49,13 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /** Evita a senha aleatória que o Spring Boot gera por padrão; o login real está no AuthService. */
+    /**
+     * Evita a senha aleatória que o Spring Boot gera por padrão.
+     * O login de verdade é feito no AuthService e o usuário é identificado pelo JWT,
+     * por isso este serviço fica vazio.
+     */
     @Bean
-    UserDetailsService userDetailsService(UsuarioRepository usuarios) {
-        return email -> usuarios.findByEmail(email)
-                .map(u -> User.withUsername(u.getEmail()).password(u.getSenhaHash()).roles(u.getPapel().name()).build())
-                .orElseThrow(() -> new UsernameNotFoundException(email));
+    UserDetailsService userDetailsService() {
+        return new InMemoryUserDetailsManager();
     }
 }
