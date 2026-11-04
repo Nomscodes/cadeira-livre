@@ -7,7 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UsuarioRepository extends JpaRepository<Usuario, UUID> {
 
-    Optional<Usuario> findByEmail(String email);
+    // o e-mail fica criptografado no banco, por isso a busca é pelo hash
+    Optional<Usuario> findByEmailHash(String emailHash);
 
-    boolean existsByEmail(String email);
+    boolean existsByEmailHash(String emailHash);
 }

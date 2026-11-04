@@ -25,3 +25,5 @@ app:
     expiracao-minutos: 1440   # 24 horas
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
+  cripto:
+    chave: ${CRYPTO_KEY}   # criptografia de e-mail e telefone no banco (RNF03)
