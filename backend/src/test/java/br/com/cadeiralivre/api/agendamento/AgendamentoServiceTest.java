@@ -138,6 +138,18 @@ class AgendamentoServiceTest {
         assertEquals(422, erro.getStatus().value());
     }
 
+    @Test
+    void servicoDesativadoNaoPodeSerAgendado() {
+        corte.setAtivo(false);
+        salaoEServicoExistem();
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
+
+        assertEquals(422, erro.getStatus().value());
+        verify(agendamentoRepository, never()).save(any());
+    }
+
     // ---------- aprovação e recusa pelo dono (painel) ----------
 
     @Test
