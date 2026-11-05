@@ -5,6 +5,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
+import br.com.cadeiralivre.api.auditoria.AuditoriaService;
 import br.com.cadeiralivre.api.barbearia.dto.PortalPublicoResponse;
 import br.com.cadeiralivre.api.barbearia.dto.PortalRequest;
 import br.com.cadeiralivre.api.barbearia.dto.PortalResponse;
@@ -22,6 +24,7 @@ public class BarbeariaService {
 
     private final BarbeariaRepository barbeariaRepository;
     private final ServicoRepository servicoRepository;
+    private final AuditoriaService auditoriaService;
 
     /** Chamado no cadastro do dono. Nasce oculta (publico = false) até o dono publicar. */
     @Transactional
@@ -54,12 +57,30 @@ public class BarbeariaService {
     @Transactional
     public PortalResponse atualizar(PortalRequest req) {
         Barbearia b = buscarDoTenant();
+        boolean vaiPublicar = Boolean.TRUE.equals(req.publico()) && !b.isPublico();
+        boolean vaiOcultar = Boolean.FALSE.equals(req.publico()) && b.isPublico();
+
+        // RF09: o portal só vai ao ar se o cliente tiver pelo menos um serviço para escolher
+        if (vaiPublicar && !servicoRepository.existsByBarbeariaIdAndAtivoTrue(b.getId())) {
+            throw ApiException.invalido("Cadastre pelo menos um serviço ativo antes de publicar o portal.");
+        }
+
         b.setNomeFantasia(req.nomeFantasia().trim());
         if (req.corPrimaria() != null) b.setCorPrimaria(req.corPrimaria());
         b.setLogoUrl(req.logoUrl());
         b.setEndereco(req.endereco());
         b.setTelefone(req.telefone());
-        if (req.publico() != null) b.setPublico(req.publico());
+        auditoriaService.registrar(AcaoAuditoria.PORTAL_ALTERADO,
+                "Nome: " + b.getNomeFantasia() + " | Cor: " + b.getCorPrimaria());
+
+        if (vaiPublicar) {
+            b.setPublico(true);
+            auditoriaService.registrar(AcaoAuditoria.PORTAL_PUBLICADO, null);
+        }
+        if (vaiOcultar) {
+            b.setPublico(false);
+            auditoriaService.registrar(AcaoAuditoria.PORTAL_OCULTADO, null);
+        }
         return PortalResponse.de(b);
     }
 

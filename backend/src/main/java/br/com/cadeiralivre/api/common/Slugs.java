@@ -21,8 +21,10 @@ public final class Slugs {
                 .toLowerCase(Locale.ROOT)
                 .replaceAll("[^a-z0-9]+", "-")
                 .replaceAll("(^-|-$)", "");
-        if (s.length() > 70) s = s.substring(0, 70);
-        if (s.isEmpty() || RESERVADOS.contains(s)) s = "barbearia-" + s;
+        // corta em 70 caracteres sem deixar hífen sobrando no fim
+        if (s.length() > 70) s = s.substring(0, 70).replaceAll("-+$", "");
+        if (s.isEmpty()) return "barbearia";
+        if (RESERVADOS.contains(s)) s = "barbearia-" + s;
         return s;
     }
 }
