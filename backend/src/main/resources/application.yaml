@@ -1,29 +1,3 @@
 spring:
   application:
     name: cadeira-livre-api
-  # Sem perfil padrão. Para rodar local, use o perfil dev:
-  # mvnw spring-boot:run "-Dspring-boot.run.profiles=dev"
-  datasource:
-    url: ${DB_URL}
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
-  jpa:
-    open-in-view: false
-    hibernate:
-      ddl-auto: none   # quem cria as tabelas é o Flyway
-  flyway:
-    enabled: true
-
-server:
-  port: ${PORT:8080}
-  servlet:
-    context-path: /api   # todas as rotas começam com /api
-
-app:
-  jwt:
-    secret: ${JWT_SECRET}
-    expiracao-minutos: 1440   # 24 horas
-  cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:5173}
-  cripto:
-    chave: ${CRYPTO_KEY}   # criptografia de e-mail e telefone no banco (RNF03)
