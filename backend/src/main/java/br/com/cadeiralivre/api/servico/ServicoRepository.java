@@ -16,4 +16,6 @@ public interface ServicoRepository extends JpaRepository<Servico, UUID> {
     Optional<Servico> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
 
     boolean existsByBarbeariaIdAndAtivoTrue(UUID barbeariaId);
+
+    long countByBarbeariaIdAndAtivoTrue(UUID barbeariaId);
 }

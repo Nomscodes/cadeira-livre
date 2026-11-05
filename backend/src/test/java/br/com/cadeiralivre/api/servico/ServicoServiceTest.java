@@ -1,7 +1,9 @@
 package br.com.cadeiralivre.api.servico;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -52,6 +54,8 @@ class ServicoServiceTest {
         TenantContext.clear();
     }
 
+    // ---------- isolamento por barbearia ----------
+
     @Test
     void listarBuscaSoOsServicosDaBarbeariaDoToken() {
         servicoService.listar();
@@ -67,13 +71,14 @@ class ServicoServiceTest {
         when(servicoRepository.save(any(Servico.class))).thenAnswer(chamada -> chamada.getArgument(0));
 
         ServicoResponse criado = servicoService.criar(
-                new ServicoRequest("  Corte  ", "Corte na tesoura", new BigDecimal("40.00"), 30));
+                new ServicoRequest("  Corte  ", "Corte na tesoura", new BigDecimal("40.00"), 30, null));
 
         ArgumentCaptor<Servico> salvo = ArgumentCaptor.forClass(Servico.class);
         verify(servicoRepository).save(salvo.capture());
         assertEquals(minhaBarbearia, salvo.getValue().getBarbearia().getId());
         assertEquals("Corte", criado.nome());
         assertEquals(30, criado.duracaoMinutos());
+        assertTrue(criado.ativo());
     }
 
     @Test
@@ -83,7 +88,7 @@ class ServicoServiceTest {
                 .thenReturn(Optional.empty());
 
         ApiException erro = assertThrows(ApiException.class, () -> servicoService.atualizar(
-                servicoDeOutraBarbearia, new ServicoRequest("Corte", null, new BigDecimal("40.00"), 30)));
+                servicoDeOutraBarbearia, pedido(null)));
 
         assertEquals(404, erro.getStatus().value());
     }
@@ -108,5 +113,78 @@ class ServicoServiceTest {
         ApiException erro = assertThrows(ApiException.class, () -> servicoService.listar());
 
         assertEquals(403, erro.getStatus().value());
+    }
+
+    // ---------- exclusão lógica ----------
+
+    @Test
+    void excluirDesativaOServicoEmVezDeApagar() {
+        Servico corte = servicoExistente(true, false);
+
+        servicoService.excluir(corte.getId());
+
+        assertFalse(corte.isAtivo());
+        verify(servicoRepository, never()).delete(any());
+    }
+
+    @Test
+    void naoDaPraDesativarOUltimoServicoDeUmPortalPublicado() {
+        Servico corte = servicoExistente(true, true);
+        when(servicoRepository.countByBarbeariaIdAndAtivoTrue(minhaBarbearia)).thenReturn(1L);
+
+        ApiException erro = assertThrows(ApiException.class, () -> servicoService.excluir(corte.getId()));
+
+        assertEquals(422, erro.getStatus().value());
+        assertTrue(corte.isAtivo());
+    }
+
+    @Test
+    void portalPublicadoComOutrosServicosAtivosPermiteDesativar() {
+        Servico corte = servicoExistente(true, true);
+        when(servicoRepository.countByBarbeariaIdAndAtivoTrue(minhaBarbearia)).thenReturn(2L);
+
+        servicoService.excluir(corte.getId());
+
+        assertFalse(corte.isAtivo());
+    }
+
+    @Test
+    void editarComAtivoTrueReativaOServico() {
+        Servico corte = servicoExistente(false, false);
+
+        ServicoResponse editado = servicoService.atualizar(corte.getId(), pedido(true));
+
+        assertTrue(editado.ativo());
+    }
+
+    @Test
+    void editarSemInformarAtivoMantemComoEsta() {
+        Servico corte = servicoExistente(false, false);
+
+        ServicoResponse editado = servicoService.atualizar(corte.getId(), pedido(null));
+
+        assertFalse(editado.ativo());
+    }
+
+    // ---------- métodos de apoio ----------
+
+    private Servico servicoExistente(boolean ativo, boolean portalPublicado) {
+        Barbearia barbearia = new Barbearia();
+        barbearia.setId(minhaBarbearia);
+        barbearia.setPublico(portalPublicado);
+
+        Servico s = new Servico();
+        s.setId(UUID.randomUUID());
+        s.setBarbearia(barbearia);
+        s.setNome("Corte");
+        s.setPreco(new BigDecimal("40.00"));
+        s.setDuracaoMinutos(30);
+        s.setAtivo(ativo);
+        when(servicoRepository.findByIdAndBarbeariaId(s.getId(), minhaBarbearia)).thenReturn(Optional.of(s));
+        return s;
+    }
+
+    private ServicoRequest pedido(Boolean ativo) {
+        return new ServicoRequest("Corte", null, new BigDecimal("40.00"), 30, ativo);
     }
 }
