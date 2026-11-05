@@ -1,0 +1,19 @@
+package br.com.cadeiralivre.api.auth.dto;
+
+import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+
+public record CadastroDonoRequest(
+        @NotBlank @Size(max = 120) String nome,
+        @NotBlank @Size(max = 160) String razaoSocial,
+        @NotBlank @Pattern(regexp = "\\d{11}|\\d{14}", message = "informe CPF (11) ou CNPJ (14) só com números") String documento,
+        @NotBlank @Email String email,
+        @NotBlank @Size(min = 8, max = 72) String senha,
+        @NotNull(message = "é preciso aceitar os termos de uso e a política de privacidade")
+        @AssertTrue(message = "é preciso aceitar os termos de uso e a política de privacidade")
+        Boolean aceitouTermos) {
+}

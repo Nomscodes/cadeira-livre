@@ -1,0 +1,16 @@
+# Banco PostgreSQL para desenvolvimento local
+services:
+  postgres:
+    image: postgres:16
+    container_name: cadeira-livre-db
+    environment:
+      POSTGRES_DB: cadeira_livre
+      POSTGRES_USER: cadeira
+      POSTGRES_PASSWORD: cadeira
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
