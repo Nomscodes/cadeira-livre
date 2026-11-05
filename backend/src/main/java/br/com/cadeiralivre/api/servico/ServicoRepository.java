@@ -1,5 +1,6 @@
 package br.com.cadeiralivre.api.servico;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,4 +19,6 @@ public interface ServicoRepository extends JpaRepository<Servico, UUID> {
     boolean existsByBarbeariaIdAndAtivoTrue(UUID barbeariaId);
 
     long countByBarbeariaIdAndAtivoTrue(UUID barbeariaId);
+
+    List<Servico> findAllByIdInAndBarbeariaId(Collection<UUID> ids, UUID barbeariaId);
 }
