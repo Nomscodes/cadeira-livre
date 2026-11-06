@@ -57,12 +57,9 @@ public class DisponibilidadeService {
 
         // os dados do dia são buscados uma vez só, e não uma vez para cada profissional
         List<Profissional> profissionais = profissionalRepository.buscarAtivosQueFazemOServico(barbearia.getId(), servico.getId());
-        HorarioFuncionamento horario = horarioRepository.findByBarbeariaIdAndDiaSemana(barbearia.getId(), data.getDayOfWeek())
-                .filter(HorarioFuncionamento::isAtivo)
-                .orElse(null);
+        HorarioFuncionamento horario = horarioDoDia(barbearia.getId(), data);
         List<BloqueioHorario> bloqueios = bloqueioRepository.findAllByBarbeariaIdAndData(barbearia.getId(), data);
-        List<Agendamento> aprovados = agendamentoRepository.findAllByBarbeariaIdAndDataAndStatus(
-                barbearia.getId(), data, StatusAgendamento.APROVADO);
+        List<Agendamento> aprovados = aprovadosDoDia(barbearia.getId(), data);
 
         List<ProfissionalDisponivel> agendas = new ArrayList<>();
         for (Profissional p : profissionais) {
@@ -70,6 +67,28 @@ public class DisponibilidadeService {
             agendas.add(new ProfissionalDisponivel(p.getId(), p.getNome(), livres));
         }
         return new DisponibilidadeResponse(data, servico.getId(), servico.getDuracaoMinutos(), agendas);
+    }
+
+    /**
+     * Usado na hora de agendar (RF14), dentro da transação do agendamento: o horário pedido
+     * precisa ser um dos horários livres do profissional, calculados com as mesmas regras da consulta acima.
+     */
+    public boolean estaLivre(Barbearia barbearia, Servico servico, Profissional profissional, LocalDate data, LocalTime hora) {
+        HorarioFuncionamento horario = horarioDoDia(barbearia.getId(), data);
+        List<BloqueioHorario> bloqueios = bloqueioRepository.findAllByBarbeariaIdAndData(barbearia.getId(), data);
+        List<Agendamento> aprovados = aprovadosDoDia(barbearia.getId(), data);
+        return horariosLivres(profissional, horario, data, servico.getDuracaoMinutos(), bloqueios, aprovados).contains(hora);
+    }
+
+    // vazio ou desativado = barbearia fechada nesse dia da semana
+    private HorarioFuncionamento horarioDoDia(UUID barbeariaId, LocalDate data) {
+        return horarioRepository.findByBarbeariaIdAndDiaSemana(barbeariaId, data.getDayOfWeek())
+                .filter(HorarioFuncionamento::isAtivo)
+                .orElse(null);
+    }
+
+    private List<Agendamento> aprovadosDoDia(UUID barbeariaId, LocalDate data) {
+        return agendamentoRepository.findAllByBarbeariaIdAndDataAndStatus(barbeariaId, data, StatusAgendamento.APROVADO);
     }
 
     private List<LocalTime> horariosLivres(Profissional p, HorarioFuncionamento horario, LocalDate data, int duracao,

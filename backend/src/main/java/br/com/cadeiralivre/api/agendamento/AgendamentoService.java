@@ -14,15 +14,16 @@ import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Coração do fluxo: o cliente SOLICITA (PENDENTE) e o dono APROVA ou RECUSA.
- * RF21: só pode existir um agendamento APROVADO por horário.
- * Parte 2: validar horário de funcionamento/bloqueios e travar a concorrência no banco.
+ * Coração do fluxo: o cliente SOLICITA (PENDENTE) com um profissional e o dono APROVA ou RECUSA.
+ * RF21: cada profissional só pode ter um agendamento APROVADO por horário.
  */
 @Service
 @RequiredArgsConstructor
@@ -31,6 +32,8 @@ public class AgendamentoService {
     private final AgendamentoRepository agendamentoRepository;
     private final BarbeariaRepository barbeariaRepository;
     private final ServicoRepository servicoRepository;
+    private final ProfissionalRepository profissionalRepository;
+    private final DisponibilidadeService disponibilidadeService;
     private final Clock clock;
 
     /** Rota pública: a barbearia vem do slug da URL. */
@@ -44,19 +47,26 @@ public class AgendamentoService {
                 .filter(Servico::isAtivo)
                 .orElseThrow(() -> ApiException.invalido("Serviço inválido para este salão."));
 
+        // o profissional tem que ser deste salão, estar ativo e fazer o serviço escolhido
+        Profissional profissional = profissionalRepository.findByIdAndBarbeariaId(req.profissionalId(), barbearia.getId())
+                .filter(Profissional::isAtivo)
+                .filter(p -> fazOServico(p, servico))
+                .orElseThrow(() -> ApiException.invalido("Profissional inválido para o serviço escolhido."));
+
         LocalTime fim = req.hora().plusMinutes(servico.getDuracaoMinutos());
         if (!fim.isAfter(req.hora())) throw ApiException.invalido("O atendimento não pode atravessar a meia-noite.");
         if (LocalDateTime.of(req.data(), req.hora()).isBefore(LocalDateTime.now(clock))) {
             throw ApiException.invalido("Escolha um horário futuro.");
         }
-        if (agendamentoRepository.existeConflito(barbearia.getId(), req.data(),
-                StatusAgendamento.APROVADO, req.hora(), fim)) {
-            throw ApiException.conflito("Esse horário já está ocupado. Escolha outro horário.");
+        // mesmas regras da disponibilidade (RF13): funcionamento, bloqueios, folgas e agendamentos aprovados
+        if (!disponibilidadeService.estaLivre(barbearia, servico, profissional, req.data(), req.hora())) {
+            throw ApiException.conflito("Esse horário não está disponível. Escolha outro horário.");
         }
 
         Agendamento a = new Agendamento();
         a.setBarbearia(barbearia);
         a.setServico(servico);
+        a.setProfissional(profissional);
         a.setClienteNome(req.clienteNome().trim());
         a.setClienteTelefone(req.clienteTelefone().trim());
         a.setData(req.data());
@@ -77,10 +87,10 @@ public class AgendamentoService {
     @Transactional
     public AgendamentoResponse aprovar(UUID id) {
         Agendamento a = buscarPendente(id);
-        // reconfere o conflito no momento da aprovação (RF21)
-        if (agendamentoRepository.existeConflito(a.getBarbearia().getId(), a.getData(),
+        // reconfere o conflito no momento da aprovação (RF21), na agenda do profissional
+        if (agendamentoRepository.existeConflito(a.getProfissional().getId(), a.getData(),
                 StatusAgendamento.APROVADO, a.getHoraInicio(), a.getHoraFim())) {
-            throw ApiException.conflito("Já existe um agendamento aprovado nesse horário.");
+            throw ApiException.conflito("O profissional já tem um agendamento aprovado nesse horário.");
         }
         a.setStatus(StatusAgendamento.APROVADO);
         return AgendamentoResponse.de(a);
@@ -100,5 +110,9 @@ public class AgendamentoService {
             throw ApiException.conflito("Só solicitações pendentes podem ser aprovadas ou recusadas.");
         }
         return a;
+    }
+
+    private boolean fazOServico(Profissional p, Servico servico) {
+        return p.getServicos().stream().anyMatch(s -> s.getId().equals(servico.getId()));
     }
 }

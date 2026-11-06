@@ -182,6 +182,25 @@ class DisponibilidadeServiceTest {
         assertFalse(resposta.profissionais().get(1).horarios().contains(LocalTime.parse("10:00"))); // Rafael ocupado
     }
 
+    // ---------- conferência na hora de agendar (RF14) ----------
+
+    @Test
+    void soDaParaAgendarHorarioQueApareceNaDisponibilidade() {
+        abertoNoDia(amanha, "09:00", "12:00");
+
+        assertTrue(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, LocalTime.parse("10:00")));
+        // 10:15 não está na lista: os horários são de 30 em 30 minutos
+        assertFalse(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, LocalTime.parse("10:15")));
+    }
+
+    @Test
+    void folgaDoProfissionalNaoDeixaAgendar() {
+        abertoNoDia(amanha, "09:00", "12:00");
+        bloqueiosDeAmanha(bloqueio(rafael, null, null));
+
+        assertFalse(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, LocalTime.parse("10:00")));
+    }
+
     // ---------- portal e serviço ----------
 
     @Test
