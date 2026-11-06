@@ -20,7 +20,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** Horário de funcionamento por dia da semana (RF19). Service/controller entram na Parte 2. */
+/**
+ * Horário de funcionamento da barbearia em um dia da semana (RF19).
+ * Dia sem registro, ou com ativo = false, é dia fechado.
+ */
 @Entity
 @Table(name = "horario_funcionamento")
 @Getter
