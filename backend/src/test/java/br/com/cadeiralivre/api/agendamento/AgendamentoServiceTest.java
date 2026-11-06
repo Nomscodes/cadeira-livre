@@ -27,6 +27,8 @@ import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
@@ -43,6 +45,12 @@ class AgendamentoServiceTest {
     @Mock
     private ServicoRepository servicoRepository;
 
+    @Mock
+    private ProfissionalRepository profissionalRepository;
+
+    @Mock
+    private DisponibilidadeService disponibilidadeService;
+
     private AgendamentoService agendamentoService;
 
     // "Agora" fixo nos testes: 10/11/2026 às 09:00 no horário de Brasília
@@ -54,11 +62,13 @@ class AgendamentoServiceTest {
 
     private Barbearia barbearia;
     private Servico corte;
+    private Profissional rafael;
 
     @BeforeEach
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
-        agendamentoService = new AgendamentoService(agendamentoRepository, barbeariaRepository, servicoRepository, relogio);
+        agendamentoService = new AgendamentoService(agendamentoRepository, barbeariaRepository, servicoRepository,
+                profissionalRepository, disponibilidadeService, relogio);
 
         barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
@@ -70,6 +80,12 @@ class AgendamentoServiceTest {
         corte.setNome("Corte");
         corte.setDuracaoMinutos(30);
         corte.setBarbearia(barbearia);
+
+        rafael = new Profissional();
+        rafael.setId(UUID.randomUUID());
+        rafael.setNome("Rafael Lima");
+        rafael.setBarbearia(barbearia);
+        rafael.getServicos().add(corte);
     }
 
     @AfterEach
@@ -80,23 +96,23 @@ class AgendamentoServiceTest {
     // ---------- solicitação pelo cliente (rota pública) ----------
 
     @Test
-    void solicitacaoDoClienteNasceComoPendente() {
-        salaoEServicoExistem();
-        when(agendamentoRepository.existeConflito(barbearia.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
-                .thenReturn(false);
+    void solicitacaoDoClienteNasceComoPendenteComOProfissionalEscolhido() {
+        salaoServicoEProfissionalExistem();
+        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(true);
         when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(chamada -> chamada.getArgument(0));
 
         AgendamentoResponse resposta = agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras));
 
         assertEquals(StatusAgendamento.PENDENTE, resposta.status());
         assertEquals(dezEMeia, resposta.horaFim()); // 10:00 + 30 min do corte
+        assertEquals("Rafael Lima", resposta.profissional());
     }
 
     @Test
-    void horarioJaAprovadoParaOutroClienteDevolve409() {
-        salaoEServicoExistem();
-        when(agendamentoRepository.existeConflito(barbearia.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
-                .thenReturn(true);
+    void horarioQueNaoEstaDisponivelDevolve409() {
+        salaoServicoEProfissionalExistem();
+        // folga, bloqueio, fora do funcionamento ou já aprovado para o profissional
+        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(false);
 
         ApiException erro = assertThrows(ApiException.class,
                 () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
@@ -107,7 +123,7 @@ class AgendamentoServiceTest {
 
     @Test
     void horarioNoPassadoDevolve422() {
-        salaoEServicoExistem();
+        salaoServicoEProfissionalExistem();
         LocalDate ontem = LocalDate.of(2026, 11, 9);
 
         ApiException erro = assertThrows(ApiException.class,
@@ -150,6 +166,30 @@ class AgendamentoServiceTest {
         verify(agendamentoRepository, never()).save(any());
     }
 
+    @Test
+    void profissionalQueNaoFazOServicoDevolve422() {
+        rafael.getServicos().clear();
+        salaoServicoEProfissionalExistem();
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
+
+        assertEquals(422, erro.getStatus().value());
+        verify(agendamentoRepository, never()).save(any());
+    }
+
+    @Test
+    void profissionalDeOutraBarbeariaDevolve422() {
+        salaoEServicoExistem();
+        when(profissionalRepository.findByIdAndBarbeariaId(rafael.getId(), barbearia.getId())).thenReturn(Optional.empty());
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
+
+        assertEquals(422, erro.getStatus().value());
+        verify(agendamentoRepository, never()).save(any());
+    }
+
     // ---------- aprovação e recusa pelo dono (painel) ----------
 
     @Test
@@ -157,7 +197,7 @@ class AgendamentoServiceTest {
         logarComoDono();
         Agendamento pendente = agendamentoPendente();
         when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
-        when(agendamentoRepository.existeConflito(barbearia.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
+        when(agendamentoRepository.existeConflito(rafael.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
                 .thenReturn(false);
 
         AgendamentoResponse resposta = agendamentoService.aprovar(pendente.getId());
@@ -166,11 +206,11 @@ class AgendamentoServiceTest {
     }
 
     @Test
-    void aprovarComOutroAgendamentoJaAprovadoNoHorarioDevolve409() {
+    void aprovarComOutroAgendamentoJaAprovadoNoHorarioDoProfissionalDevolve409() {
         logarComoDono();
         Agendamento pendente = agendamentoPendente();
         when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
-        when(agendamentoRepository.existeConflito(barbearia.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
+        when(agendamentoRepository.existeConflito(rafael.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
                 .thenReturn(true);
 
         ApiException erro = assertThrows(ApiException.class, () -> agendamentoService.aprovar(pendente.getId()));
@@ -222,12 +262,17 @@ class AgendamentoServiceTest {
         when(servicoRepository.findByIdAndBarbeariaId(corte.getId(), barbearia.getId())).thenReturn(Optional.of(corte));
     }
 
+    private void salaoServicoEProfissionalExistem() {
+        salaoEServicoExistem();
+        when(profissionalRepository.findByIdAndBarbeariaId(rafael.getId(), barbearia.getId())).thenReturn(Optional.of(rafael));
+    }
+
     private void logarComoDono() {
         TenantContext.set(barbearia.getId());
     }
 
     private AgendamentoRequest pedido(LocalDate data, LocalTime hora) {
-        return new AgendamentoRequest(corte.getId(), data, hora, "Cliente Teste", "62999999999");
+        return new AgendamentoRequest(corte.getId(), rafael.getId(), data, hora, "Cliente Teste", "62999999999");
     }
 
     private Agendamento agendamentoPendente() {
@@ -235,6 +280,7 @@ class AgendamentoServiceTest {
         a.setId(UUID.randomUUID());
         a.setBarbearia(barbearia);
         a.setServico(corte);
+        a.setProfissional(rafael);
         a.setClienteNome("Cliente Teste");
         a.setClienteTelefone("62999999999");
         a.setData(amanha);
