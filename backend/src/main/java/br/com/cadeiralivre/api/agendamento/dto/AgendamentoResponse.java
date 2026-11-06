@@ -7,13 +7,15 @@ import java.util.UUID;
 import br.com.cadeiralivre.api.agendamento.Agendamento;
 import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
 
-public record AgendamentoResponse(UUID id, StatusAgendamento status, String servico, LocalDate data,
+public record AgendamentoResponse(UUID id, StatusAgendamento status, String servico,
+                                  UUID profissionalId, String profissional, LocalDate data,
                                   LocalTime horaInicio, LocalTime horaFim,
                                   String clienteNome, String clienteTelefone) {
 
-    /** Deve ser chamado dentro de transação (servico é LAZY). */
+    /** Deve ser chamado dentro de transação (servico e profissional são LAZY). */
     public static AgendamentoResponse de(Agendamento a) {
-        return new AgendamentoResponse(a.getId(), a.getStatus(), a.getServico().getNome(), a.getData(),
+        return new AgendamentoResponse(a.getId(), a.getStatus(), a.getServico().getNome(),
+                a.getProfissional().getId(), a.getProfissional().getNome(), a.getData(),
                 a.getHoraInicio(), a.getHoraFim(), a.getClienteNome(), a.getClienteTelefone());
     }
 }
