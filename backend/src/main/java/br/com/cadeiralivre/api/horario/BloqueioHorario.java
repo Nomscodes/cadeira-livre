@@ -5,6 +5,7 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 import br.com.cadeiralivre.api.barbearia.Barbearia;
+import br.com.cadeiralivre.api.profissional.Profissional;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -18,7 +19,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** Bloqueio de data/horário específico, como feriado ou manutenção (RF20). Hora nula = dia inteiro. */
+/**
+ * Bloqueio de data ou horário, como feriado ou manutenção (RF20).
+ * Sem hora = dia inteiro. Com profissional = folga só dele; sem profissional = barbearia toda.
+ */
 @Entity
 @Table(name = "bloqueio_horario")
 @Getter
@@ -33,6 +37,10 @@ public class BloqueioHorario {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "barbearia_id", nullable = false)
     private Barbearia barbearia;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profissional_id")
+    private Profissional profissional;
 
     @Column(nullable = false)
     private LocalDate data;
