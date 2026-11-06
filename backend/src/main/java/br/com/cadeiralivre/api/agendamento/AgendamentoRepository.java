@@ -6,12 +6,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> {
 
+    // a lista do painel já traz o serviço e o profissional juntos (sem uma consulta extra por agendamento)
+    @EntityGraph(attributePaths = {"servico", "profissional"})
     List<Agendamento> findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(UUID barbeariaId);
 
     Optional<Agendamento> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
@@ -19,16 +22,16 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
     // agendamentos da barbearia em um dia e status (a disponibilidade usa os APROVADOS)
     List<Agendamento> findAllByBarbeariaIdAndDataAndStatus(UUID barbeariaId, LocalDate data, StatusAgendamento status);
 
-    /** RF21: existe agendamento no status dado que sobreponha o intervalo [inicio, fim)? */
+    /** RF21: o profissional já tem agendamento no status dado que sobreponha o intervalo [inicio, fim)? */
     @Query("""
             select count(a) > 0 from Agendamento a
-            where a.barbearia.id = :barbeariaId
+            where a.profissional.id = :profissionalId
               and a.data = :data
               and a.status = :status
               and a.horaInicio < :fim
               and a.horaFim > :inicio
             """)
-    boolean existeConflito(@Param("barbeariaId") UUID barbeariaId,
+    boolean existeConflito(@Param("profissionalId") UUID profissionalId,
                            @Param("data") LocalDate data,
                            @Param("status") StatusAgendamento status,
                            @Param("inicio") LocalTime inicio,
