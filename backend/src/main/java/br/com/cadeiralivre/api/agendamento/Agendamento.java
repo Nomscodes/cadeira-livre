@@ -45,8 +45,8 @@ public class Agendamento {
     private Servico servico;
 
     // profissional que vai atender: a agenda e a regra do RF21 são por profissional
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "profissional_id")
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "profissional_id", nullable = false)
     private Profissional profissional;
 
     @ManyToOne(fetch = FetchType.LAZY)
