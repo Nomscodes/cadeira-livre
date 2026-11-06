@@ -11,6 +11,8 @@ import jakarta.validation.constraints.Size;
 /** Dados que o cliente envia no formulário de agendamento (RF14). */
 public record AgendamentoRequest(
         @NotNull UUID servicoId,
+        // o cliente escolhe com quem quer ser atendido
+        @NotNull UUID profissionalId,
         @NotNull LocalDate data,
         @NotNull LocalTime hora,
         @NotBlank @Size(max = 120) String clienteNome,
