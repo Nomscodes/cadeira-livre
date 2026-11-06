@@ -1,8 +1,13 @@
 package br.com.cadeiralivre.api.agendamento;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -19,11 +24,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoRequest;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
+import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
+import br.com.cadeiralivre.api.auditoria.AuditoriaService;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
@@ -51,6 +60,9 @@ class AgendamentoServiceTest {
     @Mock
     private DisponibilidadeService disponibilidadeService;
 
+    @Mock
+    private AuditoriaService auditoriaService;
+
     private AgendamentoService agendamentoService;
 
     // "Agora" fixo nos testes: 10/11/2026 às 09:00 no horário de Brasília
@@ -68,7 +80,7 @@ class AgendamentoServiceTest {
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
         agendamentoService = new AgendamentoService(agendamentoRepository, barbeariaRepository, servicoRepository,
-                profissionalRepository, disponibilidadeService, relogio);
+                profissionalRepository, disponibilidadeService, auditoriaService, relogio);
 
         barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
@@ -193,7 +205,7 @@ class AgendamentoServiceTest {
     // ---------- aprovação e recusa pelo dono (painel) ----------
 
     @Test
-    void aprovarSemConflitoMudaParaAprovado() {
+    void aprovarSemConflitoMudaParaAprovadoERegistraNaAuditoria() {
         logarComoDono();
         Agendamento pendente = agendamentoPendente();
         when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
@@ -203,6 +215,23 @@ class AgendamentoServiceTest {
         AgendamentoResponse resposta = agendamentoService.aprovar(pendente.getId());
 
         assertEquals(StatusAgendamento.APROVADO, resposta.status());
+        verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_APROVADO), anyString());
+    }
+
+    @Test
+    void aprovarTravaAAgendaDoProfissionalAntesDeConferirOConflito() {
+        logarComoDono();
+        Agendamento pendente = agendamentoPendente();
+        when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
+        when(agendamentoRepository.existeConflito(rafael.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
+                .thenReturn(false);
+
+        agendamentoService.aprovar(pendente.getId());
+
+        // a ordem importa: primeiro trava, depois confere (senão duas aprovações juntas passariam)
+        InOrder ordem = inOrder(profissionalRepository, agendamentoRepository);
+        ordem.verify(profissionalRepository).buscarComTrava(rafael.getId());
+        ordem.verify(agendamentoRepository).existeConflito(rafael.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia);
     }
 
     @Test
@@ -217,6 +246,7 @@ class AgendamentoServiceTest {
 
         assertEquals(409, erro.getStatus().value());
         assertEquals(StatusAgendamento.PENDENTE, pendente.getStatus()); // continua pendente
+        verify(auditoriaService, never()).registrar(any(), any());
     }
 
     @Test
@@ -232,7 +262,7 @@ class AgendamentoServiceTest {
     }
 
     @Test
-    void recusarMudaParaRecusado() {
+    void recusarMudaParaRecusadoERegistraNaAuditoria() {
         logarComoDono();
         Agendamento pendente = agendamentoPendente();
         when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
@@ -240,6 +270,23 @@ class AgendamentoServiceTest {
         AgendamentoResponse resposta = agendamentoService.recusar(pendente.getId());
 
         assertEquals(StatusAgendamento.RECUSADO, resposta.status());
+        verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_RECUSADO), anyString());
+    }
+
+    @Test
+    void auditoriaGuardaOAgendamentoSemOsDadosDoCliente() {
+        logarComoDono();
+        Agendamento pendente = agendamentoPendente();
+        when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
+
+        agendamentoService.recusar(pendente.getId());
+
+        ArgumentCaptor<String> detalhe = ArgumentCaptor.forClass(String.class);
+        verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_RECUSADO), detalhe.capture());
+        assertTrue(detalhe.getValue().contains(pendente.getId().toString()));
+        // LGPD: o log não guarda nome nem telefone do cliente
+        assertFalse(detalhe.getValue().contains("Cliente Teste"));
+        assertFalse(detalhe.getValue().contains("62999999999"));
     }
 
     @Test

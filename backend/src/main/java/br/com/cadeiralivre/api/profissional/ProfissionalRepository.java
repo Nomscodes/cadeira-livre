@@ -6,8 +6,11 @@ import java.util.UUID;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+
+import jakarta.persistence.LockModeType;
 
 /** Todos os métodos recebem o id da barbearia: é assim que o isolamento por tenant é garantido. */
 public interface ProfissionalRepository extends JpaRepository<Profissional, UUID> {
@@ -26,4 +29,9 @@ public interface ProfissionalRepository extends JpaRepository<Profissional, UUID
             """)
     List<Profissional> buscarAtivosQueFazemOServico(@Param("barbeariaId") UUID barbeariaId,
                                                     @Param("servicoId") UUID servicoId);
+
+    // trava a linha do profissional no banco até o fim da transação (SELECT ... FOR UPDATE)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Profissional p where p.id = :id")
+    Optional<Profissional> buscarComTrava(@Param("id") UUID id);
 }

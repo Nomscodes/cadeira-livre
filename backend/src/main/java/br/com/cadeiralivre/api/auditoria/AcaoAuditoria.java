@@ -4,5 +4,7 @@ package br.com.cadeiralivre.api.auditoria;
 public enum AcaoAuditoria {
     PORTAL_ALTERADO,
     PORTAL_PUBLICADO,
-    PORTAL_OCULTADO
+    PORTAL_OCULTADO,
+    AGENDAMENTO_APROVADO,
+    AGENDAMENTO_RECUSADO
 }
