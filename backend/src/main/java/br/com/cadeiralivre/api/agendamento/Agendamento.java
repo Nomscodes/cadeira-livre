@@ -6,6 +6,7 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 import br.com.cadeiralivre.api.barbearia.Barbearia;
+import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.usuario.Cliente;
 import jakarta.persistence.Column;
@@ -42,6 +43,11 @@ public class Agendamento {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "servico_id", nullable = false)
     private Servico servico;
+
+    // profissional que vai atender: a agenda e a regra do RF21 são por profissional
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profissional_id")
+    private Profissional profissional;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cliente_id")
