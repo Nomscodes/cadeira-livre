@@ -11,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoRequest;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
+import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
+import br.com.cadeiralivre.api.auditoria.AuditoriaService;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
@@ -24,6 +26,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * Coração do fluxo: o cliente SOLICITA (PENDENTE) com um profissional e o dono APROVA ou RECUSA.
  * RF21: cada profissional só pode ter um agendamento APROVADO por horário.
+ * RNF09: aprovar e recusar ficam registrados na auditoria.
  */
 @Service
 @RequiredArgsConstructor
@@ -34,6 +37,7 @@ public class AgendamentoService {
     private final ServicoRepository servicoRepository;
     private final ProfissionalRepository profissionalRepository;
     private final DisponibilidadeService disponibilidadeService;
+    private final AuditoriaService auditoriaService;
     private final Clock clock;
 
     /** Rota pública: a barbearia vem do slug da URL. */
@@ -87,12 +91,16 @@ public class AgendamentoService {
     @Transactional
     public AgendamentoResponse aprovar(UUID id) {
         Agendamento a = buscarPendente(id);
+        // trava a agenda do profissional até a aprovação terminar: se duas aprovações do mesmo horário
+        // chegarem juntas, a segunda espera a primeira acabar e aí já enxerga o conflito
+        profissionalRepository.buscarComTrava(a.getProfissional().getId());
         // reconfere o conflito no momento da aprovação (RF21), na agenda do profissional
         if (agendamentoRepository.existeConflito(a.getProfissional().getId(), a.getData(),
                 StatusAgendamento.APROVADO, a.getHoraInicio(), a.getHoraFim())) {
             throw ApiException.conflito("O profissional já tem um agendamento aprovado nesse horário.");
         }
         a.setStatus(StatusAgendamento.APROVADO);
+        auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_APROVADO, detalheParaAuditoria(a));
         return AgendamentoResponse.de(a);
     }
 
@@ -100,6 +108,7 @@ public class AgendamentoService {
     public AgendamentoResponse recusar(UUID id) {
         Agendamento a = buscarPendente(id);
         a.setStatus(StatusAgendamento.RECUSADO);
+        auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_RECUSADO, detalheParaAuditoria(a));
         return AgendamentoResponse.de(a);
     }
 
@@ -110,6 +119,12 @@ public class AgendamentoService {
             throw ApiException.conflito("Só solicitações pendentes podem ser aprovadas ou recusadas.");
         }
         return a;
+    }
+
+    // sem nome nem telefone do cliente: o log fica guardado mesmo depois que os dados do cliente forem apagados (LGPD)
+    private String detalheParaAuditoria(Agendamento a) {
+        return "Agendamento " + a.getId() + " | " + a.getData() + " " + a.getHoraInicio()
+                + " | " + a.getProfissional().getNome();
     }
 
     private boolean fazOServico(Profissional p, Servico servico) {
