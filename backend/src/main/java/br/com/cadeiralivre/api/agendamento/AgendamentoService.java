@@ -1,6 +1,7 @@
 package br.com.cadeiralivre.api.agendamento;
 
 import java.time.Clock;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
@@ -80,12 +81,14 @@ public class AgendamentoService {
         return AgendamentoResponse.de(agendamentoRepository.save(a));
     }
 
-    /** Rotas do painel: a barbearia vem do JWT (TenantContext). */
+    /** Rotas do painel: a barbearia vem do JWT (TenantContext). Com data, mostra só a agenda daquele dia. */
     @Transactional(readOnly = true)
-    public List<AgendamentoResponse> listarDoPainel() {
-        return agendamentoRepository
-                .findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(TenantContext.require())
-                .stream().map(AgendamentoResponse::de).toList();
+    public List<AgendamentoResponse> listarDoPainel(LocalDate data) {
+        UUID barbeariaId = TenantContext.require();
+        List<Agendamento> agendamentos = data == null
+                ? agendamentoRepository.findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(barbeariaId)
+                : agendamentoRepository.findAllByBarbeariaIdAndDataOrderByHoraInicioAscProfissionalNomeAsc(barbeariaId, data);
+        return agendamentos.stream().map(AgendamentoResponse::de).toList();
     }
 
     @Transactional
