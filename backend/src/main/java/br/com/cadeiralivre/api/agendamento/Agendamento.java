@@ -6,10 +6,12 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 import br.com.cadeiralivre.api.barbearia.Barbearia;
+import br.com.cadeiralivre.api.common.cripto.CriptografiaConverter;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.usuario.Cliente;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -56,7 +58,9 @@ public class Agendamento {
     @Column(name = "cliente_nome", nullable = false, length = 120)
     private String clienteNome;
 
-    @Column(name = "cliente_telefone", nullable = false, length = 20)
+    // gravado criptografado no banco (RNF03)
+    @Convert(converter = CriptografiaConverter.class)
+    @Column(name = "cliente_telefone", nullable = false, length = 512)
     private String clienteTelefone;
 
     @Column(nullable = false)
