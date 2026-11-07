@@ -17,6 +17,10 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
     @EntityGraph(attributePaths = {"servico", "profissional"})
     List<Agendamento> findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(UUID barbeariaId);
 
+    // agenda de um dia no painel, em ordem de horário
+    @EntityGraph(attributePaths = {"servico", "profissional"})
+    List<Agendamento> findAllByBarbeariaIdAndDataOrderByHoraInicioAscProfissionalNomeAsc(UUID barbeariaId, LocalDate data);
+
     Optional<Agendamento> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
 
     // agendamentos da barbearia em um dia e status (a disponibilidade usa os APROVADOS)
