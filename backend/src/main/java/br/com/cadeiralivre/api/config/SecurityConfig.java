@@ -39,6 +39,7 @@ public class SecurityConfig {
                 .requestMatchers("/auth/**", "/saloes/**", "/error",
                         "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/painel/**").hasRole("DONO")
+                .requestMatchers("/cliente/**").hasRole("CLIENTE")
                 .anyRequest().authenticated())
             .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
         return http.build();
