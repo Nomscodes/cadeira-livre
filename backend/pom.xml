@@ -139,6 +139,12 @@
 						<goals>
 							<goal>report</goal>
 						</goals>
+						<configuration>
+							<!-- a classe main só sobe o Spring, não tem regra para testar -->
+							<excludes>
+								<exclude>br/com/cadeiralivre/api/CadeiraLivreApiApplication.class</exclude>
+							</excludes>
+						</configuration>
 					</execution>
 				</executions>
 			</plugin>
