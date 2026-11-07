@@ -23,6 +23,13 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
 
     Optional<Agendamento> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
 
+    // histórico do cliente: os agendamentos dele em todas as barbearias, do mais recente para o mais antigo
+    @EntityGraph(attributePaths = {"barbearia", "servico", "profissional"})
+    List<Agendamento> findAllByClienteIdOrderByDataDescHoraInicioDesc(UUID clienteId);
+
+    // o cliente só enxerga (e cancela) os agendamentos que são dele
+    Optional<Agendamento> findByIdAndClienteId(UUID id, UUID clienteId);
+
     // agendamentos da barbearia em um dia e status (a disponibilidade usa os APROVADOS)
     List<Agendamento> findAllByBarbeariaIdAndDataAndStatus(UUID barbeariaId, LocalDate data, StatusAgendamento status);
 

@@ -19,9 +19,11 @@ import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
+import br.com.cadeiralivre.api.security.UsuarioLogado;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
+import br.com.cadeiralivre.api.usuario.ClienteRepository;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -39,9 +41,10 @@ public class AgendamentoService {
     private final ProfissionalRepository profissionalRepository;
     private final DisponibilidadeService disponibilidadeService;
     private final AuditoriaService auditoriaService;
+    private final ClienteRepository clienteRepository;
     private final Clock clock;
 
-    /** Rota pública: a barbearia vem do slug da URL. */
+    /** Rota pública: a barbearia vem do slug da URL. Se o cliente estiver logado, o agendamento entra no histórico dele. */
     @Transactional
     public AgendamentoResponse solicitar(String slug, AgendamentoRequest req) {
         Barbearia barbearia = barbeariaRepository.findBySlug(slug)
@@ -78,6 +81,12 @@ public class AgendamentoService {
         a.setHoraInicio(req.hora());
         a.setHoraFim(fim);
         a.setStatus(StatusAgendamento.PENDENTE);
+
+        // sem login o agendamento continua funcionando, só não aparece em "meus agendamentos"
+        UUID clienteId = UsuarioLogado.clienteId();
+        if (clienteId != null) {
+            clienteRepository.findById(clienteId).ifPresent(a::setCliente);
+        }
         return AgendamentoResponse.de(agendamentoRepository.save(a));
     }
 

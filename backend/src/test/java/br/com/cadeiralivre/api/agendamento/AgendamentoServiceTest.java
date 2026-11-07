@@ -2,6 +2,8 @@ package br.com.cadeiralivre.api.agendamento;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,6 +31,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoRequest;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
@@ -42,6 +47,8 @@ import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
+import br.com.cadeiralivre.api.usuario.Cliente;
+import br.com.cadeiralivre.api.usuario.ClienteRepository;
 
 @ExtendWith(MockitoExtension.class)
 class AgendamentoServiceTest {
@@ -64,6 +71,9 @@ class AgendamentoServiceTest {
     @Mock
     private AuditoriaService auditoriaService;
 
+    @Mock
+    private ClienteRepository clienteRepository;
+
     private AgendamentoService agendamentoService;
 
     // "Agora" fixo nos testes: 10/11/2026 às 09:00 no horário de Brasília
@@ -81,7 +91,7 @@ class AgendamentoServiceTest {
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
         agendamentoService = new AgendamentoService(agendamentoRepository, barbeariaRepository, servicoRepository,
-                profissionalRepository, disponibilidadeService, auditoriaService, relogio);
+                profissionalRepository, disponibilidadeService, auditoriaService, clienteRepository, relogio);
 
         barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
@@ -102,8 +112,9 @@ class AgendamentoServiceTest {
     }
 
     @AfterEach
-    void limparTenant() {
+    void limpar() {
         TenantContext.clear();
+        SecurityContextHolder.clearContext();
     }
 
     // ---------- solicitação pelo cliente (rota pública) ----------
@@ -119,6 +130,37 @@ class AgendamentoServiceTest {
         assertEquals(StatusAgendamento.PENDENTE, resposta.status());
         assertEquals(dezEMeia, resposta.horaFim()); // 10:00 + 30 min do corte
         assertEquals("Rafael Lima", resposta.profissional());
+    }
+
+    @Test
+    void clienteLogadoTemOAgendamentoGuardadoNoHistoricoDele() {
+        Cliente joao = new Cliente();
+        joao.setId(UUID.randomUUID());
+        logarComoCliente(joao.getId());
+        salaoServicoEProfissionalExistem();
+        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(true);
+        when(clienteRepository.findById(joao.getId())).thenReturn(Optional.of(joao));
+        when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(chamada -> chamada.getArgument(0));
+
+        agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras));
+
+        ArgumentCaptor<Agendamento> salvo = ArgumentCaptor.forClass(Agendamento.class);
+        verify(agendamentoRepository).save(salvo.capture());
+        assertSame(joao, salvo.getValue().getCliente());
+    }
+
+    @Test
+    void semLoginOAgendamentoFicaSemCliente() {
+        salaoServicoEProfissionalExistem();
+        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(true);
+        when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(chamada -> chamada.getArgument(0));
+
+        agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras));
+
+        ArgumentCaptor<Agendamento> salvo = ArgumentCaptor.forClass(Agendamento.class);
+        verify(agendamentoRepository).save(salvo.capture());
+        assertNull(salvo.getValue().getCliente());
+        verify(clienteRepository, never()).findById(any());
     }
 
     @Test
@@ -341,6 +383,12 @@ class AgendamentoServiceTest {
 
     private void logarComoDono() {
         TenantContext.set(barbearia.getId());
+    }
+
+    // simula o que o JwtAuthenticationFilter faz com o token de um cliente
+    private void logarComoCliente(UUID clienteId) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                clienteId.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_CLIENTE"))));
     }
 
     private AgendamentoRequest pedido(LocalDate data, LocalTime hora) {
