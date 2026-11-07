@@ -17,6 +17,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -200,6 +201,30 @@ class AgendamentoServiceTest {
 
         assertEquals(422, erro.getStatus().value());
         verify(agendamentoRepository, never()).save(any());
+    }
+
+    // ---------- lista do painel ----------
+
+    @Test
+    void listarSemDataTrazTodosOsAgendamentosDaBarbearia() {
+        logarComoDono();
+
+        agendamentoService.listarDoPainel(null);
+
+        verify(agendamentoRepository).findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(barbearia.getId());
+    }
+
+    @Test
+    void listarComDataTrazSoAAgendaDaqueleDia() {
+        logarComoDono();
+        when(agendamentoRepository.findAllByBarbeariaIdAndDataOrderByHoraInicioAscProfissionalNomeAsc(barbearia.getId(), amanha))
+                .thenReturn(List.of(agendamentoPendente()));
+
+        List<AgendamentoResponse> agenda = agendamentoService.listarDoPainel(amanha);
+
+        assertEquals(1, agenda.size());
+        assertEquals(amanha, agenda.get(0).data());
+        verify(agendamentoRepository, never()).findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(any());
     }
 
     // ---------- aprovação e recusa pelo dono (painel) ----------
