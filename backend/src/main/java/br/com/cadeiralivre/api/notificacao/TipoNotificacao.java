@@ -6,11 +6,13 @@ public enum TipoNotificacao {
     // para o dono da barbearia
     NOVO_AGENDAMENTO("Novo pedido de agendamento"),
     CANCELAMENTO("Agendamento cancelado"),
+    LEMBRETE_DONO("Atendimento daqui a pouco"),
 
     // para o cliente
     HORARIO_APROVADO("Horário confirmado"),
     HORARIO_RECUSADO("Pedido não aceito"),
-    ATENDIMENTO_CONCLUIDO("Como foi seu atendimento?");
+    ATENDIMENTO_CONCLUIDO("Como foi seu atendimento?"),
+    LEMBRETE_CLIENTE("Seu horário é amanhã");
 
     private final String titulo;
 

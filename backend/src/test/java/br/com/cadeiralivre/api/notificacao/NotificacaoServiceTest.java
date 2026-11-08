@@ -157,6 +157,30 @@ class NotificacaoServiceTest {
     }
 
     @Test
+    void lembreteDoDonoMostraOClienteEOHorario() {
+        TenantContext.set(barbearia.getId());
+        when(notificacaoRepository.findTop30ByBarbeariaIdOrderByCriadaEmDesc(barbearia.getId()))
+                .thenReturn(List.of(notificacao(TipoNotificacao.LEMBRETE_DONO)));
+
+        NotificacaoResponse n = notificacaoService.listarDoDono().get(0);
+
+        assertEquals("Atendimento daqui a pouco", n.titulo());
+        assertEquals("Gabriel Naoki tem horário às 14:00 com Diego Santos (Corte).", n.texto());
+    }
+
+    @Test
+    void lembreteDoClienteMostraABarbearia() {
+        logarComo(gabriel.getId(), "ROLE_CLIENTE");
+        when(notificacaoRepository.findTop30ByClienteIdOrderByCriadaEmDesc(gabriel.getId()))
+                .thenReturn(List.of(notificacao(TipoNotificacao.LEMBRETE_CLIENTE)));
+
+        NotificacaoResponse n = notificacaoService.listarDoCliente().get(0);
+
+        assertEquals("Seu horário é amanhã", n.titulo());
+        assertEquals("Corte com Diego Santos em 12/11 às 14:00, na Barbearia Teste - Gabriel Naoki.", n.texto());
+    }
+
+    @Test
     void clienteQueExcluiuAContaApareceComoClienteRemovido() {
         // depois da exclusão da conta (PR16) o agendamento fica sem o nome; o texto acompanha (LGPD)
         agendamento.setClienteNome("Cliente removido");
