@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.cadeiralivre.api.agendamento.dto.MeuAgendamentoResponse;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
+import br.com.cadeiralivre.api.notificacao.TipoNotificacao;
 import br.com.cadeiralivre.api.security.UsuarioLogado;
 import lombok.RequiredArgsConstructor;
 
@@ -25,6 +27,7 @@ public class ClienteAgendamentoService {
     private static final int HORAS_DE_ANTECEDENCIA_PARA_CANCELAR = 1;
 
     private final AgendamentoRepository agendamentoRepository;
+    private final NotificacaoService notificacaoService;
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -33,7 +36,10 @@ public class ClienteAgendamentoService {
                 .stream().map(MeuAgendamentoResponse::de).toList();
     }
 
-    /** Cancelar um agendamento aprovado libera o horário: a disponibilidade só considera os APROVADOS. */
+    /**
+     * Cancelar um agendamento aprovado libera o horário: a disponibilidade só considera os APROVADOS.
+     * O dono recebe uma notificação do cancelamento.
+     */
     @Transactional
     public MeuAgendamentoResponse cancelar(UUID id) {
         Agendamento a = agendamentoRepository.findByIdAndClienteId(id, clienteLogado())
@@ -49,6 +55,7 @@ public class ClienteAgendamentoService {
         }
 
         a.setStatus(StatusAgendamento.CANCELADO);
+        notificacaoService.paraDono(a, TipoNotificacao.CANCELAMENTO);
         return MeuAgendamentoResponse.de(a);
     }
 
