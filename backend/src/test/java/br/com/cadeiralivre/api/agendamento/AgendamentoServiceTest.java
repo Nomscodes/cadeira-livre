@@ -369,6 +369,75 @@ class AgendamentoServiceTest {
         assertEquals(404, erro.getStatus().value());
     }
 
+    // ---------- conclusão do atendimento pelo dono (painel) ----------
+
+    @Test
+    void concluirAtendimentoQueJaComecouMudaParaConcluidoERegistraNaAuditoria() {
+        logarComoDono();
+        // hoje às 08:00, e "agora" são 09:00
+        Agendamento aprovado = agendamentoAprovadoHoje(LocalTime.of(8, 0));
+        when(agendamentoRepository.findByIdAndBarbeariaId(aprovado.getId(), barbearia.getId())).thenReturn(Optional.of(aprovado));
+
+        AgendamentoResponse resposta = agendamentoService.concluir(aprovado.getId());
+
+        assertEquals(StatusAgendamento.CONCLUIDO, resposta.status());
+        verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_CONCLUIDO), anyString());
+    }
+
+    @Test
+    void noHorarioExatoDoInicioJaDaPraConcluir() {
+        logarComoDono();
+        // hoje às 09:00, e "agora" são 09:00
+        Agendamento aprovado = agendamentoAprovadoHoje(LocalTime.of(9, 0));
+        when(agendamentoRepository.findByIdAndBarbeariaId(aprovado.getId(), barbearia.getId())).thenReturn(Optional.of(aprovado));
+
+        agendamentoService.concluir(aprovado.getId());
+
+        assertEquals(StatusAgendamento.CONCLUIDO, aprovado.getStatus());
+    }
+
+    @Test
+    void concluirAntesDoHorarioComecarDevolve422() {
+        logarComoDono();
+        // amanhã às 10:00: o atendimento ainda não aconteceu
+        Agendamento aprovado = agendamentoPendente();
+        aprovado.setStatus(StatusAgendamento.APROVADO);
+        when(agendamentoRepository.findByIdAndBarbeariaId(aprovado.getId(), barbearia.getId())).thenReturn(Optional.of(aprovado));
+
+        ApiException erro = assertThrows(ApiException.class, () -> agendamentoService.concluir(aprovado.getId()));
+
+        assertEquals(422, erro.getStatus().value());
+        assertEquals(StatusAgendamento.APROVADO, aprovado.getStatus());
+        verify(auditoriaService, never()).registrar(any(), any());
+    }
+
+    @Test
+    void soDaPraConcluirAgendamentoAprovado() {
+        logarComoDono();
+        // pendente: o dono nem aprovou, então o atendimento não pode ter acontecido
+        Agendamento pendente = agendamentoAprovadoHoje(LocalTime.of(8, 0));
+        pendente.setStatus(StatusAgendamento.PENDENTE);
+        when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
+
+        ApiException erro = assertThrows(ApiException.class, () -> agendamentoService.concluir(pendente.getId()));
+
+        assertEquals(409, erro.getStatus().value());
+        verify(auditoriaService, never()).registrar(any(), any());
+    }
+
+    @Test
+    void concluirAgendamentoDeOutraBarbeariaDevolve404() {
+        logarComoDono();
+        UUID agendamentoDeOutraBarbearia = UUID.randomUUID();
+        when(agendamentoRepository.findByIdAndBarbeariaId(agendamentoDeOutraBarbearia, barbearia.getId()))
+                .thenReturn(Optional.empty());
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> agendamentoService.concluir(agendamentoDeOutraBarbearia));
+
+        assertEquals(404, erro.getStatus().value());
+    }
+
     // ---------- métodos de apoio ----------
 
     private void salaoEServicoExistem() {
@@ -393,6 +462,16 @@ class AgendamentoServiceTest {
 
     private AgendamentoRequest pedido(LocalDate data, LocalTime hora) {
         return new AgendamentoRequest(corte.getId(), rafael.getId(), data, hora, "Cliente Teste", "62999999999");
+    }
+
+    // agendamento aprovado para hoje (10/11), começando no horário informado
+    private Agendamento agendamentoAprovadoHoje(LocalTime inicio) {
+        Agendamento a = agendamentoPendente();
+        a.setData(LocalDate.of(2026, 11, 10));
+        a.setHoraInicio(inicio);
+        a.setHoraFim(inicio.plusMinutes(30));
+        a.setStatus(StatusAgendamento.APROVADO);
+        return a;
     }
 
     private Agendamento agendamentoPendente() {
