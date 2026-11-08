@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
 import lombok.RequiredArgsConstructor;
 
-/** Painel do dono: lista as solicitações e aprova ou recusa cada uma. */
+/** Painel do dono: lista as solicitações, aprova ou recusa cada uma e marca o atendimento como concluído. */
 @RestController
 @RequestMapping("/painel/agendamentos")
 @RequiredArgsConstructor
@@ -38,5 +38,11 @@ public class PainelAgendamentoController {
     @PostMapping("/{id}/recusar")
     public AgendamentoResponse recusar(@PathVariable UUID id) {
         return agendamentoService.recusar(id);
+    }
+
+    // depois do atendimento: só agendamento aprovado e depois que o horário começou
+    @PostMapping("/{id}/concluir")
+    public AgendamentoResponse concluir(@PathVariable UUID id) {
+        return agendamentoService.concluir(id);
     }
 }
