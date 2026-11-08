@@ -30,6 +30,13 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
     // o cliente só enxerga (e cancela) os agendamentos que são dele
     Optional<Agendamento> findByIdAndClienteId(UUID id, UUID clienteId);
 
+    // lembrete do dono: agendamentos de todas as barbearias de um dia que começam dentro do intervalo
+    List<Agendamento> findAllByStatusAndDataAndHoraInicioBetween(StatusAgendamento status, LocalDate data,
+                                                                 LocalTime de, LocalTime ate);
+
+    // lembrete da véspera: agendamentos de todas as barbearias de um dia, só de quem agendou com conta
+    List<Agendamento> findAllByStatusAndDataAndClienteIsNotNull(StatusAgendamento status, LocalDate data);
+
     // agendamentos da barbearia em um dia e status (a disponibilidade usa os APROVADOS)
     List<Agendamento> findAllByBarbeariaIdAndDataAndStatus(UUID barbeariaId, LocalDate data, StatusAgendamento status);
 
