@@ -28,8 +28,9 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Coração do fluxo: o cliente SOLICITA (PENDENTE) com um profissional e o dono APROVA ou RECUSA.
+ * Depois do atendimento, o dono marca o agendamento como CONCLUÍDO.
  * RF21: cada profissional só pode ter um agendamento APROVADO por horário.
- * RNF09: aprovar e recusar ficam registrados na auditoria.
+ * RNF09: aprovar, recusar e concluir ficam registrados na auditoria.
  */
 @Service
 @RequiredArgsConstructor
@@ -124,9 +125,30 @@ public class AgendamentoService {
         return AgendamentoResponse.de(a);
     }
 
-    private Agendamento buscarPendente(UUID id) {
-        Agendamento a = agendamentoRepository.findByIdAndBarbeariaId(id, TenantContext.require())
+    /** O dono marca que o atendimento aconteceu. Só depois disso o cliente pode avaliar. */
+    @Transactional
+    public AgendamentoResponse concluir(UUID id) {
+        Agendamento a = buscarDaBarbearia(id);
+        if (a.getStatus() != StatusAgendamento.APROVADO) {
+            throw ApiException.conflito("Só agendamentos aprovados podem ser concluídos.");
+        }
+        // não dá para concluir um atendimento que ainda nem começou
+        if (LocalDateTime.now(clock).isBefore(LocalDateTime.of(a.getData(), a.getHoraInicio()))) {
+            throw ApiException.invalido("O atendimento só pode ser concluído depois que o horário começar.");
+        }
+        a.setStatus(StatusAgendamento.CONCLUIDO);
+        auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_CONCLUIDO, detalheParaAuditoria(a));
+        return AgendamentoResponse.de(a);
+    }
+
+    // o dono só enxerga os agendamentos da própria barbearia (RNF05)
+    private Agendamento buscarDaBarbearia(UUID id) {
+        return agendamentoRepository.findByIdAndBarbeariaId(id, TenantContext.require())
                 .orElseThrow(() -> ApiException.naoEncontrado("Agendamento não encontrado."));
+    }
+
+    private Agendamento buscarPendente(UUID id) {
+        Agendamento a = buscarDaBarbearia(id);
         if (a.getStatus() != StatusAgendamento.PENDENTE) {
             throw ApiException.conflito("Só solicitações pendentes podem ser aprovadas ou recusadas.");
         }
