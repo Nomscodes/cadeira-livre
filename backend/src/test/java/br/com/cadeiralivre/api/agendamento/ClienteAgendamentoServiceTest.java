@@ -2,6 +2,7 @@ package br.com.cadeiralivre.api.agendamento;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -27,6 +28,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import br.com.cadeiralivre.api.agendamento.dto.MeuAgendamentoResponse;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
+import br.com.cadeiralivre.api.notificacao.TipoNotificacao;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.servico.Servico;
 
@@ -35,6 +38,9 @@ class ClienteAgendamentoServiceTest {
 
     @Mock
     private AgendamentoRepository agendamentoRepository;
+
+    @Mock
+    private NotificacaoService notificacaoService;
 
     private ClienteAgendamentoService clienteAgendamentoService;
 
@@ -47,7 +53,7 @@ class ClienteAgendamentoServiceTest {
     @BeforeEach
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
-        clienteAgendamentoService = new ClienteAgendamentoService(agendamentoRepository, relogio);
+        clienteAgendamentoService = new ClienteAgendamentoService(agendamentoRepository, notificacaoService, relogio);
 
         Barbearia barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
@@ -99,6 +105,8 @@ class ClienteAgendamentoServiceTest {
         MeuAgendamentoResponse resposta = clienteAgendamentoService.cancelar(agendamento.getId());
 
         assertEquals(StatusAgendamento.CANCELADO, resposta.status());
+        // o dono fica sabendo do cancelamento
+        verify(notificacaoService).paraDono(agendamento, TipoNotificacao.CANCELAMENTO);
     }
 
     @Test
@@ -136,6 +144,7 @@ class ClienteAgendamentoServiceTest {
 
         assertEquals(409, erro.getStatus().value());
         assertEquals(StatusAgendamento.RECUSADO, agendamento.getStatus());
+        verifyNoInteractions(notificacaoService);
     }
 
     @Test

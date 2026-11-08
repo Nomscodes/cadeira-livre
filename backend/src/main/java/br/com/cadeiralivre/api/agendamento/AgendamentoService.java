@@ -17,6 +17,8 @@ import br.com.cadeiralivre.api.auditoria.AuditoriaService;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
+import br.com.cadeiralivre.api.notificacao.TipoNotificacao;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.security.UsuarioLogado;
@@ -31,6 +33,7 @@ import lombok.RequiredArgsConstructor;
  * Depois do atendimento, o dono marca o agendamento como CONCLUÍDO.
  * RF21: cada profissional só pode ter um agendamento APROVADO por horário.
  * RNF09: aprovar, recusar e concluir ficam registrados na auditoria.
+ * RF03: cada passo gera uma notificação para o dono ou para o cliente.
  */
 @Service
 @RequiredArgsConstructor
@@ -43,6 +46,7 @@ public class AgendamentoService {
     private final DisponibilidadeService disponibilidadeService;
     private final AuditoriaService auditoriaService;
     private final ClienteRepository clienteRepository;
+    private final NotificacaoService notificacaoService;
     private final Clock clock;
 
     /** Rota pública: a barbearia vem do slug da URL. Se o cliente estiver logado, o agendamento entra no histórico dele. */
@@ -88,7 +92,9 @@ public class AgendamentoService {
         if (clienteId != null) {
             clienteRepository.findById(clienteId).ifPresent(a::setCliente);
         }
-        return AgendamentoResponse.de(agendamentoRepository.save(a));
+        Agendamento salvo = agendamentoRepository.save(a);
+        notificacaoService.paraDono(salvo, TipoNotificacao.NOVO_AGENDAMENTO);
+        return AgendamentoResponse.de(salvo);
     }
 
     /** Rotas do painel: a barbearia vem do JWT (TenantContext). Com data, mostra só a agenda daquele dia. */
@@ -114,6 +120,7 @@ public class AgendamentoService {
         }
         a.setStatus(StatusAgendamento.APROVADO);
         auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_APROVADO, detalheParaAuditoria(a));
+        notificacaoService.paraCliente(a, TipoNotificacao.HORARIO_APROVADO);
         return AgendamentoResponse.de(a);
     }
 
@@ -122,6 +129,7 @@ public class AgendamentoService {
         Agendamento a = buscarPendente(id);
         a.setStatus(StatusAgendamento.RECUSADO);
         auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_RECUSADO, detalheParaAuditoria(a));
+        notificacaoService.paraCliente(a, TipoNotificacao.HORARIO_RECUSADO);
         return AgendamentoResponse.de(a);
     }
 
@@ -138,6 +146,7 @@ public class AgendamentoService {
         }
         a.setStatus(StatusAgendamento.CONCLUIDO);
         auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_CONCLUIDO, detalheParaAuditoria(a));
+        notificacaoService.paraCliente(a, TipoNotificacao.ATENDIMENTO_CONCLUIDO);
         return AgendamentoResponse.de(a);
     }
 
