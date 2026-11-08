@@ -17,7 +17,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** Avaliação (nota 1–5) de um atendimento concluído. Service/controller entram na Parte 2. */
+/** Avaliação (nota de 1 a 5 e comentário opcional) de um atendimento concluído. Uma por agendamento. */
 @Entity
 @Table(name = "avaliacao")
 @Getter
