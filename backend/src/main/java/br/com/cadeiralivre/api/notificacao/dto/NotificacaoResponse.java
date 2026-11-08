@@ -32,11 +32,14 @@ public record NotificacaoResponse(UUID id, TipoNotificacao tipo, String titulo, 
                     + " em " + dia + " às " + hora + ". Aprove ou recuse no painel.";
             case CANCELAMENTO -> cliente + " cancelou " + servico + " com " + profissional
                     + " de " + dia + " às " + hora + ".";
+            case LEMBRETE_DONO -> cliente + " tem horário às " + hora + " com " + profissional + " (" + servico + ").";
             case HORARIO_APROVADO -> "A barbearia confirmou seu " + servico + " com " + profissional
                     + " em " + dia + " às " + hora + ".";
             case HORARIO_RECUSADO -> "A barbearia não pôde aceitar seu " + servico
                     + " em " + dia + " às " + hora + ". Escolha outro horário.";
             case ATENDIMENTO_CONCLUIDO -> "Seu " + servico + " com " + profissional + " foi concluído. Toque para avaliar.";
+            case LEMBRETE_CLIENTE -> servico + " com " + profissional + " em " + dia + " às " + hora
+                    + ", na " + a.getBarbearia().getNomeFantasia() + ".";
         };
 
         return new NotificacaoResponse(n.getId(), n.getTipo(), n.getTipo().getTitulo(), texto,
