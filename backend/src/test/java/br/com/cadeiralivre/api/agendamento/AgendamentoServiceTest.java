@@ -12,6 +12,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
@@ -42,6 +43,8 @@ import br.com.cadeiralivre.api.auditoria.AuditoriaService;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
+import br.com.cadeiralivre.api.notificacao.TipoNotificacao;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.servico.Servico;
@@ -74,6 +77,9 @@ class AgendamentoServiceTest {
     @Mock
     private ClienteRepository clienteRepository;
 
+    @Mock
+    private NotificacaoService notificacaoService;
+
     private AgendamentoService agendamentoService;
 
     // "Agora" fixo nos testes: 10/11/2026 às 09:00 no horário de Brasília
@@ -91,7 +97,7 @@ class AgendamentoServiceTest {
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
         agendamentoService = new AgendamentoService(agendamentoRepository, barbeariaRepository, servicoRepository,
-                profissionalRepository, disponibilidadeService, auditoriaService, clienteRepository, relogio);
+                profissionalRepository, disponibilidadeService, auditoriaService, clienteRepository, notificacaoService, relogio);
 
         barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
@@ -130,6 +136,8 @@ class AgendamentoServiceTest {
         assertEquals(StatusAgendamento.PENDENTE, resposta.status());
         assertEquals(dezEMeia, resposta.horaFim()); // 10:00 + 30 min do corte
         assertEquals("Rafael Lima", resposta.profissional());
+        // o dono fica sabendo do pedido novo
+        verify(notificacaoService).paraDono(any(Agendamento.class), eq(TipoNotificacao.NOVO_AGENDAMENTO));
     }
 
     @Test
@@ -174,6 +182,7 @@ class AgendamentoServiceTest {
 
         assertEquals(409, erro.getStatus().value());
         verify(agendamentoRepository, never()).save(any());
+        verifyNoInteractions(notificacaoService);
     }
 
     @Test
@@ -283,6 +292,7 @@ class AgendamentoServiceTest {
 
         assertEquals(StatusAgendamento.APROVADO, resposta.status());
         verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_APROVADO), anyString());
+        verify(notificacaoService).paraCliente(pendente, TipoNotificacao.HORARIO_APROVADO);
     }
 
     @Test
@@ -314,6 +324,7 @@ class AgendamentoServiceTest {
         assertEquals(409, erro.getStatus().value());
         assertEquals(StatusAgendamento.PENDENTE, pendente.getStatus()); // continua pendente
         verify(auditoriaService, never()).registrar(any(), any());
+        verifyNoInteractions(notificacaoService);
     }
 
     @Test
@@ -338,6 +349,7 @@ class AgendamentoServiceTest {
 
         assertEquals(StatusAgendamento.RECUSADO, resposta.status());
         verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_RECUSADO), anyString());
+        verify(notificacaoService).paraCliente(pendente, TipoNotificacao.HORARIO_RECUSADO);
     }
 
     @Test
@@ -382,6 +394,7 @@ class AgendamentoServiceTest {
 
         assertEquals(StatusAgendamento.CONCLUIDO, resposta.status());
         verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_CONCLUIDO), anyString());
+        verify(notificacaoService).paraCliente(aprovado, TipoNotificacao.ATENDIMENTO_CONCLUIDO);
     }
 
     @Test
@@ -409,6 +422,7 @@ class AgendamentoServiceTest {
         assertEquals(422, erro.getStatus().value());
         assertEquals(StatusAgendamento.APROVADO, aprovado.getStatus());
         verify(auditoriaService, never()).registrar(any(), any());
+        verifyNoInteractions(notificacaoService);
     }
 
     @Test
