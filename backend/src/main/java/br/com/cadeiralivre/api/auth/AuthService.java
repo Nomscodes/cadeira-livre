@@ -17,13 +17,16 @@ import br.com.cadeiralivre.api.barbearia.BarbeariaService;
 import br.com.cadeiralivre.api.common.cripto.Criptografia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.security.JwtService;
+import br.com.cadeiralivre.api.security.Sessao;
+import br.com.cadeiralivre.api.security.SessaoService;
+import br.com.cadeiralivre.api.security.UsuarioLogado;
 import br.com.cadeiralivre.api.usuario.Cliente;
 import br.com.cadeiralivre.api.usuario.DonoBarbearia;
 import br.com.cadeiralivre.api.usuario.Usuario;
 import br.com.cadeiralivre.api.usuario.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 
-/** Regras de cadastro (RF01–RF03), login (RF04) e aceite dos termos (RNF02). */
+/** Regras de cadastro (RF01–RF03), login (RF04), logout (RF05) e aceite dos termos (RNF02). */
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -32,15 +35,24 @@ public class AuthService {
     private final BarbeariaService barbeariaService;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final SessaoService sessaoService;
     private final Criptografia criptografia;
     private final Clock clock;
 
-    @Transactional(readOnly = true)
+    // não é readOnly porque o login grava a sessão nova no banco
+    @Transactional
     public SessaoResponse login(LoginRequest req) {
         Usuario usuario = usuarioRepository.findByEmailHash(hashDoEmail(req.email()))
                 .filter(u -> passwordEncoder.matches(req.senha(), u.getSenhaHash()))
                 .orElseThrow(() -> ApiException.naoAutorizado("E-mail ou senha incorretos."));
         return sessao(usuario);
+    }
+
+    /** RF05: encerra a sessão do token usado na requisição. A partir daí esse token não vale mais. */
+    public void logout() {
+        UUID sessaoId = UsuarioLogado.sessaoId();
+        if (sessaoId == null) throw ApiException.naoAutorizado("Faça login para continuar.");
+        sessaoService.encerrar(sessaoId);
     }
 
     /** Cria a barbearia (tenant) e o usuário dono na mesma transação. */
@@ -90,9 +102,11 @@ public class AuthService {
         return email.trim().toLowerCase();
     }
 
+    // abre a sessão no banco e gera o token com o id dela
     private SessaoResponse sessao(Usuario u) {
         UUID barbeariaId = u instanceof DonoBarbearia d ? d.getBarbearia().getId() : null;
-        String token = jwtService.gerar(u.getId(), u.getPapel(), barbeariaId);
+        Sessao sessaoAberta = sessaoService.abrir(u);
+        String token = jwtService.gerar(u.getId(), u.getPapel(), barbeariaId, sessaoAberta.getId());
         return new SessaoResponse(token,
                 new SessaoResponse.UsuarioSessao(u.getId(), u.getNome(), u.getPapel().name(), barbeariaId));
     }

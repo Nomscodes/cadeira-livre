@@ -18,7 +18,7 @@ import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
-/** Gera e valida o JWT. Claims: sub = id do usuário, papel e barbeariaId (só para DONO). */
+/** Gera e valida o JWT. Claims: sub = id do usuário, papel, sessaoId e barbeariaId (só para DONO). */
 @Service
 public class JwtService {
 
@@ -34,11 +34,13 @@ public class JwtService {
         this.clock = clock;
     }
 
-    public String gerar(UUID usuarioId, Papel papel, UUID barbeariaId) {
+    public String gerar(UUID usuarioId, Papel papel, UUID barbeariaId, UUID sessaoId) {
         Instant agora = Instant.now(clock);
         JwtBuilder builder = Jwts.builder()
                 .subject(usuarioId.toString())
                 .claim("papel", papel.name())
+                // RF05: o filtro confere em toda requisição se esta sessão ainda está aberta
+                .claim("sessaoId", sessaoId.toString())
                 .issuedAt(Date.from(agora))
                 .expiration(Date.from(agora.plus(expiracaoMinutos, ChronoUnit.MINUTES)));
         if (barbeariaId != null) builder.claim("barbeariaId", barbeariaId.toString());

@@ -7,7 +7,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 /**
  * Diz quem está logado na requisição atual.
- * O JwtAuthenticationFilter guarda o id do usuário (subject do token) como "nome" da autenticação.
+ * O JwtAuthenticationFilter guarda o id do usuário (subject do token) como "nome" da autenticação
+ * e o id da sessão do token como "detalhes".
  */
 public final class UsuarioLogado {
 
@@ -21,5 +22,12 @@ public final class UsuarioLogado {
         boolean ehCliente = auth.getAuthorities().stream()
                 .anyMatch(papel -> "ROLE_CLIENTE".equals(papel.getAuthority()));
         return ehCliente ? UUID.fromString(auth.getName()) : null;
+    }
+
+    /** Id da sessão do token usado na requisição (RF05), ou null se ninguém estiver logado. */
+    public static UUID sessaoId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return null;
+        return auth.getDetails() instanceof UUID sessaoId ? sessaoId : null;
     }
 }

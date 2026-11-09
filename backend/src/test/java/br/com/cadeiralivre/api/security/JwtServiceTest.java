@@ -26,21 +26,24 @@ class JwtServiceTest {
     private final JwtService jwtService = new JwtService(CHAVE, 60, agora);
 
     @Test
-    void tokenDeDonoGuardaUsuarioPapelEBarbearia() {
+    void tokenDeDonoGuardaUsuarioPapelBarbeariaESessao() {
         UUID usuarioId = UUID.randomUUID();
         UUID barbeariaId = UUID.randomUUID();
+        UUID sessaoId = UUID.randomUUID();
 
-        String token = jwtService.gerar(usuarioId, Papel.DONO, barbeariaId);
+        String token = jwtService.gerar(usuarioId, Papel.DONO, barbeariaId, sessaoId);
         Claims claims = jwtService.validar(token);
 
         assertEquals(usuarioId.toString(), claims.getSubject());
         assertEquals("DONO", claims.get("papel", String.class));
         assertEquals(barbeariaId.toString(), claims.get("barbeariaId", String.class));
+        // o filtro usa este id para saber se a sessão ainda está aberta (RF05)
+        assertEquals(sessaoId.toString(), claims.get("sessaoId", String.class));
     }
 
     @Test
     void tokenDeClienteNaoTemBarbearia() {
-        String token = jwtService.gerar(UUID.randomUUID(), Papel.CLIENTE, null);
+        String token = jwtService.gerar(UUID.randomUUID(), Papel.CLIENTE, null, UUID.randomUUID());
 
         assertNull(jwtService.validar(token).get("barbeariaId"));
     }
@@ -48,7 +51,7 @@ class JwtServiceTest {
     @Test
     void tokenAssinadoComOutraChaveEhRecusado() {
         JwtService outroServidor = new JwtService("outra-chave-secreta-com-mais-de-32-caracteres", 60, agora);
-        String tokenFalso = outroServidor.gerar(UUID.randomUUID(), Papel.DONO, UUID.randomUUID());
+        String tokenFalso = outroServidor.gerar(UUID.randomUUID(), Papel.DONO, UUID.randomUUID(), UUID.randomUUID());
 
         assertThrows(JwtException.class, () -> jwtService.validar(tokenFalso));
     }
@@ -57,7 +60,8 @@ class JwtServiceTest {
     void tokenGeradoOntemJaVenceu() {
         // token de 60 minutos gerado 24 horas antes do "agora"
         Clock ontem = Clock.fixed(Instant.parse("2026-11-09T12:00:00Z"), ZoneOffset.UTC);
-        String tokenDeOntem = new JwtService(CHAVE, 60, ontem).gerar(UUID.randomUUID(), Papel.CLIENTE, null);
+        String tokenDeOntem = new JwtService(CHAVE, 60, ontem)
+                .gerar(UUID.randomUUID(), Papel.CLIENTE, null, UUID.randomUUID());
 
         assertThrows(ExpiredJwtException.class, () -> jwtService.validar(tokenDeOntem));
     }

@@ -20,15 +20,18 @@ import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * 1º passo do fluxo de uma requisição autenticada: lê o header Authorization, valida o JWT,
- * preenche o SecurityContext (quem é) e o TenantContext (de qual barbearia).
+ * confere se a sessão do token continua aberta (RF05), preenche o SecurityContext (quem é)
+ * e o TenantContext (de qual barbearia).
  * Não é @Component de propósito: é instanciado no SecurityConfig (evita registro duplicado).
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final SessaoService sessaoService;
 
-    public JwtAuthenticationFilter(JwtService jwtService) {
+    public JwtAuthenticationFilter(JwtService jwtService, SessaoService sessaoService) {
         this.jwtService = jwtService;
+        this.sessaoService = sessaoService;
     }
 
     @Override
@@ -38,13 +41,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             if (header != null && header.startsWith("Bearer ")) {
                 Claims claims = jwtService.validar(header.substring(7));
-                var auth = new UsernamePasswordAuthenticationToken(
-                        claims.getSubject(), null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + claims.get("papel", String.class))));
-                SecurityContextHolder.getContext().setAuthentication(auth);
 
-                String barbeariaId = claims.get("barbeariaId", String.class);
-                if (barbeariaId != null) TenantContext.set(UUID.fromString(barbeariaId));
+                // RF05: o token só vale enquanto a sessão dele estiver aberta (o logout encerra a sessão).
+                // Token sem sessão (gerado antes do logout existir) ou de sessão encerrada segue sem usuário.
+                String sessaoDoToken = claims.get("sessaoId", String.class);
+                UUID sessaoId = sessaoDoToken != null ? UUID.fromString(sessaoDoToken) : null;
+                if (sessaoId != null && sessaoService.estaAtiva(sessaoId)) {
+                    var auth = new UsernamePasswordAuthenticationToken(
+                            claims.getSubject(), null,
+                            List.of(new SimpleGrantedAuthority("ROLE_" + claims.get("papel", String.class))));
+                    // guardado para o logout saber qual sessão encerrar
+                    auth.setDetails(sessaoId);
+                    SecurityContextHolder.getContext().setAuthentication(auth);
+
+                    String barbeariaId = claims.get("barbeariaId", String.class);
+                    if (barbeariaId != null) TenantContext.set(UUID.fromString(barbeariaId));
+                }
             }
         } catch (JwtException | IllegalArgumentException e) {
             // Token inválido ou expirado: a requisição segue sem usuário logado.
