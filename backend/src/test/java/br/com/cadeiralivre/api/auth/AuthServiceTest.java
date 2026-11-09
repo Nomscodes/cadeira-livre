@@ -12,15 +12,20 @@ import static org.mockito.Mockito.when;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import br.com.cadeiralivre.api.auth.dto.CadastroClienteRequest;
@@ -32,6 +37,8 @@ import br.com.cadeiralivre.api.barbearia.BarbeariaService;
 import br.com.cadeiralivre.api.common.cripto.Criptografia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.security.JwtService;
+import br.com.cadeiralivre.api.security.Sessao;
+import br.com.cadeiralivre.api.security.SessaoService;
 import br.com.cadeiralivre.api.usuario.Cliente;
 import br.com.cadeiralivre.api.usuario.Papel;
 import br.com.cadeiralivre.api.usuario.Usuario;
@@ -52,6 +59,9 @@ class AuthServiceTest {
     @Mock
     private JwtService jwtService;
 
+    @Mock
+    private SessaoService sessaoService;
+
     // a criptografia é a de verdade, com uma chave de teste
     private final Criptografia criptografia = new Criptografia("Y2hhdmUtZGUtdGVzdGUtY29tLTMyLWJ5dGVzLW9rISE=");
 
@@ -59,11 +69,22 @@ class AuthServiceTest {
 
     private AuthService authService;
 
+    // a sessão que o login abre no banco (RF05)
+    private Sessao sessaoAberta;
+
     @BeforeEach
     void preparar() {
         // a Criptografia e o Clock não são mocks, por isso o service é criado na mão
         authService = new AuthService(usuarioRepository, barbeariaService, passwordEncoder, jwtService,
-                criptografia, Clock.fixed(agora, ZoneOffset.UTC));
+                sessaoService, criptografia, Clock.fixed(agora, ZoneOffset.UTC));
+
+        sessaoAberta = new Sessao();
+        sessaoAberta.setId(UUID.randomUUID());
+    }
+
+    @AfterEach
+    void limpar() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -82,7 +103,8 @@ class AuthServiceTest {
         String hashEsperado = criptografia.hash("cliente@teste.com");
         when(usuarioRepository.existsByEmailHash(hashEsperado)).thenReturn(false);
         when(passwordEncoder.encode("12345678")).thenReturn("senha-criptografada");
-        when(jwtService.gerar(any(), eq(Papel.CLIENTE), isNull())).thenReturn("token-falso");
+        when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
+        when(jwtService.gerar(any(), eq(Papel.CLIENTE), isNull(), eq(sessaoAberta.getId()))).thenReturn("token-falso");
 
         SessaoResponse sessao = authService.cadastrarCliente(novoCliente("  Cliente@Teste.com "));
 
@@ -102,7 +124,8 @@ class AuthServiceTest {
         Barbearia barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
         when(barbeariaService.criar("Barbearia Teste", "12345678901")).thenReturn(barbearia);
-        when(jwtService.gerar(any(), eq(Papel.DONO), eq(barbearia.getId()))).thenReturn("token-falso");
+        when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
+        when(jwtService.gerar(any(), eq(Papel.DONO), eq(barbearia.getId()), eq(sessaoAberta.getId()))).thenReturn("token-falso");
 
         SessaoResponse sessao = authService.cadastrarDono(new CadastroDonoRequest(
                 "Dono Teste", "Barbearia Teste", "12345678901", "dono@teste.com", "12345678", true));
@@ -117,10 +140,12 @@ class AuthServiceTest {
         cliente.setSenhaHash("hash-salvo");
         when(usuarioRepository.findByEmailHash(criptografia.hash("cliente@teste.com"))).thenReturn(Optional.of(cliente));
         when(passwordEncoder.matches("12345678", "hash-salvo")).thenReturn(true);
-        when(jwtService.gerar(any(), eq(Papel.CLIENTE), isNull())).thenReturn("token-falso");
+        when(sessaoService.abrir(cliente)).thenReturn(sessaoAberta);
+        when(jwtService.gerar(any(), eq(Papel.CLIENTE), isNull(), eq(sessaoAberta.getId()))).thenReturn("token-falso");
 
         SessaoResponse sessao = authService.login(new LoginRequest("  Cliente@Teste.COM ", "12345678"));
 
+        // o token devolvido é o que leva o id da sessão aberta neste login
         assertEquals("token-falso", sessao.token());
     }
 
@@ -135,7 +160,8 @@ class AuthServiceTest {
                 () -> authService.login(new LoginRequest("cliente@teste.com", "senha-errada")));
 
         assertEquals(401, erro.getStatus().value());
-        verify(jwtService, never()).gerar(any(), any(), any());
+        verify(sessaoService, never()).abrir(any());
+        verify(jwtService, never()).gerar(any(), any(), any(), any());
     }
 
     @Test
@@ -147,6 +173,33 @@ class AuthServiceTest {
 
         // mesma resposta da senha errada: não revela se o e-mail existe
         assertEquals(401, erro.getStatus().value());
+    }
+
+    @Test
+    void logoutEncerraASessaoDoTokenUsado() {
+        UUID gabrielId = UUID.randomUUID();
+        UUID sessaoDoToken = UUID.randomUUID();
+        logarComo(gabrielId, sessaoDoToken);
+
+        authService.logout();
+
+        verify(sessaoService).encerrar(sessaoDoToken);
+    }
+
+    @Test
+    void logoutSemLoginDevolve401() {
+        ApiException erro = assertThrows(ApiException.class, () -> authService.logout());
+
+        assertEquals(401, erro.getStatus().value());
+        verify(sessaoService, never()).encerrar(any());
+    }
+
+    // simula o que o JwtAuthenticationFilter faz com o token: usuário no "nome" e sessão nos "detalhes"
+    private void logarComo(UUID usuarioId, UUID sessaoId) {
+        var auth = new UsernamePasswordAuthenticationToken(
+                usuarioId.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_CLIENTE")));
+        auth.setDetails(sessaoId);
+        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     private CadastroClienteRequest novoCliente(String email) {
