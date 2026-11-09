@@ -238,6 +238,82 @@ route('POST', '/cliente/agendamentos/:id/avaliacao', (ctx) => {
 })
 
 /* =========================================================
+   NOTIFICACOES DO CLIENTE
+   Mesmo contrato do backend: GET /cliente/notificacoes e POST /cliente/notificacoes/:id/lida.
+   A notificacao guarda so o tipo e o agendamento; o texto e montado na hora, igual ao backend.
+   ========================================================= */
+const TITULOS_CLIENTE = {
+  HORARIO_APROVADO: 'Horário confirmado',
+  HORARIO_RECUSADO: 'Pedido não aceito',
+  ATENDIMENTO_CONCLUIDO: 'Como foi seu atendimento?',
+  LEMBRETE_CLIENTE: 'Seu horário é amanhã',
+}
+
+function textoParaCliente(tipo, a) {
+  const servico = textoItens(a)
+  const profissional = textoProfs(a)
+  const dia = formatDateBR(a.data).slice(0, 5) // dd/MM
+  if (tipo === 'HORARIO_APROVADO') return `A barbearia confirmou seu ${servico} com ${profissional} em ${dia} às ${a.hora}.`
+  if (tipo === 'HORARIO_RECUSADO') return `A barbearia não pôde aceitar seu ${servico} em ${dia} às ${a.hora}. Escolha outro horário.`
+  if (tipo === 'ATENDIMENTO_CONCLUIDO') return `Seu ${servico} com ${profissional} foi concluído. Toque para avaliar.`
+  const s = db().saloes.find((x) => x.id === a.salaoId)
+  return `${servico} com ${profissional} em ${dia} às ${a.hora}, na ${s?.nome}.`
+}
+
+/**
+ * Faz o papel do backend: no mock o salao confirma na hora (vira "Horario confirmado"), o lembrete sai na vespera
+ * e o convite para avaliar sai depois do atendimento. Cada aviso e criado uma vez so por agendamento.
+ */
+function gerarNotificacoesDoCliente(sess) {
+  if (!db().notificacoesCliente) db().notificacoesCliente = [] // bancos do mock salvos antes deste recurso
+  const lista = db().notificacoesCliente
+  const amanha = addDaysISO(todayISO(), 1)
+  const criar = (a, tipo, criadaEm) => {
+    if (lista.some((n) => n.agendamentoId === a.id && n.tipo === tipo)) return
+    lista.push({ id: nextId('nc'), agendamentoId: a.id, tipo, criadaEm, lidaEm: null })
+  }
+  db().agendamentos.filter((a) => pertenceAoCliente(a, sess)).forEach((a) => {
+    const status = statusEfetivo(a)
+    const agora = new Date().toISOString()
+    if (status === 'confirmado') criar(a, 'HORARIO_APROVADO', agora)
+    if (status === 'confirmado' && a.data === amanha) criar(a, 'LEMBRETE_CLIENTE', agora)
+    if (status === 'finalizado' && !a.avaliado) {
+      const fim = new Date(startOf(a.data, a.hora).getTime() + a.duracao * 60000).toISOString()
+      criar(a, 'ATENDIMENTO_CONCLUIDO', fim)
+    }
+  })
+}
+
+const notificacaoDoCliente = (id, sess) => {
+  const n = (db().notificacoesCliente || []).find((x) => x.id === id)
+  const a = n && db().agendamentos.find((x) => x.id === n.agendamentoId)
+  return a && pertenceAoCliente(a, sess) ? n : null
+}
+
+route('GET', '/cliente/notificacoes', (ctx) => {
+  const sess = requireCliente(ctx)
+  gerarNotificacoesDoCliente(sess)
+  save()
+  return db().notificacoesCliente
+    .map((n) => ({ n, a: db().agendamentos.find((x) => x.id === n.agendamentoId) }))
+    .filter(({ a }) => a && pertenceAoCliente(a, sess))
+    .sort((x, y) => y.n.criadaEm.localeCompare(x.n.criadaEm))
+    .slice(0, 30)
+    .map(({ n, a }) => ({
+      id: n.id, tipo: n.tipo, titulo: TITULOS_CLIENTE[n.tipo], texto: textoParaCliente(n.tipo, a),
+      agendamentoId: a.id, criadaEm: n.criadaEm, lida: !!n.lidaEm,
+    }))
+})
+route('POST', '/cliente/notificacoes/:id/lida', (ctx) => {
+  const sess = requireCliente(ctx)
+  const n = notificacaoDoCliente(ctx.params.id, sess)
+  if (!n) throw new ApiError(404, 'Notificação não encontrada.')
+  if (!n.lidaEm) n.lidaEm = new Date().toISOString() // abrir de novo nao muda a data
+  save()
+  return null
+})
+
+/* =========================================================
    PAINEL DO RESPONSAVEL
    ========================================================= */
 function problemasPublicacao(s) {
