@@ -3,6 +3,8 @@ package br.com.cadeiralivre.api.security;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -11,6 +13,7 @@ import java.time.ZoneOffset;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -30,12 +33,22 @@ class JwtAuthenticationFilterTest {
 
     private final Clock agora = Clock.fixed(Instant.parse("2026-11-10T12:00:00Z"), ZoneOffset.UTC);
     private final JwtService jwtService = new JwtService(CHAVE, 60, agora);
-    private final JwtAuthenticationFilter filtro = new JwtAuthenticationFilter(jwtService);
+    // a sessão vem do banco; aqui o mock responde se ela está aberta
+    private final SessaoService sessaoService = mock(SessaoService.class);
+    private final JwtAuthenticationFilter filtro = new JwtAuthenticationFilter(jwtService, sessaoService);
+
+    private final UUID sessaoAberta = UUID.randomUUID();
 
     // o que o resto da aplicação (controller e services) enxergou durante a requisição
     private boolean chegouNoController;
     private Authentication usuarioNaRequisicao;
     private UUID barbeariaNaRequisicao;
+    private UUID sessaoNaRequisicao;
+
+    @BeforeEach
+    void preparar() {
+        when(sessaoService.estaAtiva(sessaoAberta)).thenReturn(true);
+    }
 
     @AfterEach
     void limpar() {
@@ -47,7 +60,7 @@ class JwtAuthenticationFilterTest {
     void tokenDeDonoIdentificaUsuarioPapelEBarbearia() throws Exception {
         UUID usuarioId = UUID.randomUUID();
         UUID barbeariaId = UUID.randomUUID();
-        String token = jwtService.gerar(usuarioId, Papel.DONO, barbeariaId);
+        String token = jwtService.gerar(usuarioId, Papel.DONO, barbeariaId, sessaoAberta);
 
         enviarComAuthorization("Bearer " + token);
 
@@ -59,11 +72,51 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void tokenDeClienteNaoTemBarbearia() throws Exception {
-        String token = jwtService.gerar(UUID.randomUUID(), Papel.CLIENTE, null);
+        String token = jwtService.gerar(UUID.randomUUID(), Papel.CLIENTE, null, sessaoAberta);
 
         enviarComAuthorization("Bearer " + token);
 
         assertEquals("ROLE_CLIENTE", papelDoUsuario());
+        assertNull(barbeariaNaRequisicao);
+    }
+
+    @Test
+    void sessaoDoTokenFicaGuardadaParaOLogout() throws Exception {
+        String token = jwtService.gerar(UUID.randomUUID(), Papel.CLIENTE, null, sessaoAberta);
+
+        enviarComAuthorization("Bearer " + token);
+
+        assertEquals(sessaoAberta, sessaoNaRequisicao);
+    }
+
+    @Test
+    void tokenDeSessaoEncerradaSegueSemUsuario() throws Exception {
+        // RF05: depois do logout, o mesmo token (ainda dentro das 24 horas) não identifica mais ninguém
+        UUID sessaoEncerrada = UUID.randomUUID();
+        when(sessaoService.estaAtiva(sessaoEncerrada)).thenReturn(false);
+        String token = jwtService.gerar(UUID.randomUUID(), Papel.DONO, UUID.randomUUID(), sessaoEncerrada);
+
+        enviarComAuthorization("Bearer " + token);
+
+        assertTrue(chegouNoController);
+        assertNull(usuarioNaRequisicao);
+        assertNull(barbeariaNaRequisicao);
+    }
+
+    @Test
+    void tokenSemSessaoSegueSemUsuario() throws Exception {
+        // token com a assinatura certa, mas sem sessaoId (como os gerados antes do logout existir)
+        String token = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .claim("papel", "DONO")
+                .claim("barbeariaId", UUID.randomUUID().toString())
+                .signWith(Keys.hmacShaKeyFor(CHAVE.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        enviarComAuthorization("Bearer " + token);
+
+        assertTrue(chegouNoController);
+        assertNull(usuarioNaRequisicao);
         assertNull(barbeariaNaRequisicao);
     }
 
@@ -97,10 +150,11 @@ class JwtAuthenticationFilterTest {
 
     @Test
     void tokenComBarbeariaMalformadaNaoDeixaUsuarioLogadoPelaMetade() throws Exception {
-        // token assinado com a chave certa, mas com um barbeariaId que não é UUID
+        // token assinado com a chave certa e com sessão aberta, mas com um barbeariaId que não é UUID
         String token = Jwts.builder()
                 .subject(UUID.randomUUID().toString())
                 .claim("papel", "DONO")
+                .claim("sessaoId", sessaoAberta.toString())
                 .claim("barbeariaId", "nao-eh-um-uuid")
                 .signWith(Keys.hmacShaKeyFor(CHAVE.getBytes(StandardCharsets.UTF_8)))
                 .compact();
@@ -116,7 +170,7 @@ class JwtAuthenticationFilterTest {
     void usuarioEBarbeariaSaoLimposQuandoARequisicaoTermina() throws Exception {
         // o Tomcat reaproveita as threads: sem limpar, a próxima requisição
         // poderia "herdar" o login e a barbearia da anterior (RNF05)
-        String token = jwtService.gerar(UUID.randomUUID(), Papel.DONO, UUID.randomUUID());
+        String token = jwtService.gerar(UUID.randomUUID(), Papel.DONO, UUID.randomUUID(), sessaoAberta);
 
         enviarComAuthorization("Bearer " + token);
 
@@ -135,6 +189,7 @@ class JwtAuthenticationFilterTest {
             chegouNoController = true;
             usuarioNaRequisicao = SecurityContextHolder.getContext().getAuthentication();
             barbeariaNaRequisicao = barbeariaAtual();
+            sessaoNaRequisicao = UsuarioLogado.sessaoId();
         });
     }
 
