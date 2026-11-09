@@ -1,8 +1,10 @@
 package br.com.cadeiralivre.api.auth;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import br.com.cadeiralivre.api.auth.dto.CadastroClienteRequest;
@@ -23,6 +25,13 @@ public class AuthController {
     @PostMapping("/login")
     public SessaoResponse login(@Valid @RequestBody LoginRequest req) {
         return authService.login(req);
+    }
+
+    /** Logout (RF05): encerra a sessão do token. Depois disso, o mesmo token recebe 401. */
+    @PostMapping("/logout")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void logout() {
+        authService.logout();
     }
 
     /** Cadastro do dono + criação da barbearia (RF02). */
