@@ -14,6 +14,8 @@
 .topbar-simple { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 40px; border-bottom: 1px solid var(--line); font-size: 11px; color: var(--label); }
 .topbar-simple .back { display: inline-flex; align-items: center; gap: 6px; color: var(--label); text-decoration: none; }
 .topbar-simple .back:hover { color: var(--c-ink); }
+/* busca de saloes: link do historico e sino das notificacoes lado a lado */
+.topbar-acoes { display: flex; align-items: center; gap: 14px; }
 .logo-box { display: flex; align-items: center; padding: 2px 0; }
 .logo-box img { display: block; width: auto; height: 34px; }
 .center-col { display: flex; justify-content: center; padding: 48px 30px; background: var(--bg); }
@@ -101,6 +103,9 @@
   .nav-client { display: none; position: absolute; left: 0; right: 0; top: 100%; flex-direction: column; align-items: stretch; gap: 0; padding: 6px 16px 12px; background: #fff; border-bottom: 1px solid var(--c-line); box-shadow: var(--shadow-pop); font-size: 14px; }
   .nav-client.open { display: flex; }
   .nav-client a, .nav-client button.navlink { padding: 14px 4px; border-bottom: 1px solid var(--c-line); text-align: left; }
+  /* no menu do celular o sino vira uma linha, como os links; a lista abre logo abaixo dele */
+  .nav-client .bell-wrap { padding: 10px 4px; border-bottom: 1px solid var(--c-line); }
+  .nav-client .bell-panel { top: 56px; left: 0; right: auto; }
 }
 
 /* celular: o quadro some e o conteudo ocupa a tela inteira */
