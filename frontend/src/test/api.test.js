@@ -410,3 +410,40 @@ describe('notificacoes geradas pelos eventos', () => {
     expect((await api.get('/notificacoes', { as: 'staff' }))[0].tipo).toBe('cancelamento')
   })
 })
+
+describe('notificacoes do cliente', () => {
+  it('mostra o horario confirmado e o convite para avaliar, com o texto igual ao do backend', async () => {
+    cliente()
+    const lista = await api.get('/cliente/notificacoes', { as: 'cliente' })
+    // h1 esta confirmado; h2 foi concluido e ainda nao avaliado; h3 ja foi avaliado e h4 foi cancelado
+    expect(lista.map((n) => [n.tipo, n.agendamentoId]).sort()).toEqual([['ATENDIMENTO_CONCLUIDO', 'h2'], ['HORARIO_APROVADO', 'h1']])
+    const confirmado = lista.find((n) => n.tipo === 'HORARIO_APROVADO')
+    expect(confirmado).toMatchObject({ titulo: 'Horário confirmado', lida: false })
+    expect(confirmado.texto).toMatch(/^A barbearia confirmou seu Corte de cabelo com Rafael em \d{2}\/\d{2} às 09:00\.$/)
+    expect(lista.find((n) => n.tipo === 'ATENDIMENTO_CONCLUIDO').texto).toBe('Seu Combo Corte + Barba com Rafael foi concluído. Toque para avaliar.')
+  })
+  it('lembra o cliente na vespera, uma vez so', async () => {
+    cliente()
+    getDb().agendamentos.find((a) => a.id === 'h1').data = addDaysISO(todayISO(), 1)
+    await api.get('/cliente/notificacoes', { as: 'cliente' })
+    const lista = await api.get('/cliente/notificacoes', { as: 'cliente' }) // a segunda busca nao repete os avisos
+    const lembretes = lista.filter((n) => n.tipo === 'LEMBRETE_CLIENTE')
+    expect(lembretes.length).toBe(1)
+    expect(lembretes[0].titulo).toBe('Seu horário é amanhã')
+    expect(lembretes[0].texto).toMatch(/^Corte de cabelo com Rafael em \d{2}\/\d{2} às 09:00, na Barbearia do Rafael\.$/)
+    expect(lista.length).toBe(3)
+  })
+  it('marca como lida e nao mexe na notificacao de outra pessoa', async () => {
+    cliente()
+    const [primeira] = await api.get('/cliente/notificacoes', { as: 'cliente' })
+    await api.post(`/cliente/notificacoes/${primeira.id}/lida`, {}, { as: 'cliente' })
+    const depois = await api.get('/cliente/notificacoes', { as: 'cliente' })
+    expect(depois.find((n) => n.id === primeira.id).lida).toBe(true)
+    await expect(api.post('/cliente/notificacoes/nao-existe/lida', {}, { as: 'cliente' })).rejects.toMatchObject({ status: 404 })
+  })
+  it('sem acesso do cliente nao ve notificacoes', async () => {
+    await expect(api.get('/cliente/notificacoes', { as: 'cliente' })).rejects.toMatchObject({ status: 401 })
+    await staff()
+    await expect(api.get('/cliente/notificacoes', { as: 'staff' })).rejects.toMatchObject({ status: 401 })
+  })
+})

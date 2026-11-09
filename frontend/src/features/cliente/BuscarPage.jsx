@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Scissors } from 'lucide-react'
 import logo from '../../assets/logo-wordmark.png'
 import Frame from '../../components/layout/Frame'
+import ClienteNotificationBell from '../../components/layout/ClienteNotificationBell'
 import { api } from '../../lib/http'
 import { useAsync, useDebounced, useDocumentTitle } from '../../lib/hooks'
 import { initials } from '../../lib/format'
@@ -21,7 +22,10 @@ export default function BuscarPage() {
     <Frame>
       <header className="topbar-simple">
         <Link to="/buscar" className="logo-box" aria-label="Cadeira Livre"><img src={logo} alt="Cadeira Livre" style={{ height: 32 }} /></Link>
-        <Link to="/meus-agendamentos" className="link-small">meus agendamentos</Link>
+        <div className="topbar-acoes">
+          <Link to="/meus-agendamentos" className="link-small">meus agendamentos</Link>
+          <ClienteNotificationBell />
+        </div>
       </header>
       <main className="screen-pad lg" id="conteudo">
       <h1 className="sr-only">Encontre seu salão</h1>

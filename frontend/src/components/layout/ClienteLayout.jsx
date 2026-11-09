@@ -4,6 +4,7 @@ import { Menu, X } from 'lucide-react'
 import logo from '../../assets/logo-mark.png'
 import { useCliente } from '../../context/ClienteContext'
 import Frame from './Frame'
+import ClienteNotificationBell from './ClienteNotificationBell'
 
 /** Historico do cliente: cabecalho com a marca Cadeira Livre (header-client do mockup). */
 export default function ClienteLayout() {
@@ -25,6 +26,7 @@ export default function ClienteLayout() {
           <nav id="nav-cliente" className={`nav-client${aberto ? ' open' : ''}`} aria-label="Principal" onClick={() => setAberto(false)}>
             <NavLink to="/buscar">buscar salões</NavLink>
             <NavLink to="/meus-agendamentos">meus agendamentos</NavLink>
+            <ClienteNotificationBell />
             <button type="button" className="navlink" onClick={() => { sair(); navigate('/acesso') }}>sair</button>
           </nav>
         </div>
