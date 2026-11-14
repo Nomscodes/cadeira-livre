@@ -4,7 +4,7 @@ import Frame from './Frame'
 
 /**
  * Moldura das telas soltas.
- *  back      link "← voltar" no topo (recuperar senha, acesso, avaliacao)
+ *  back      link "← voltar" no topo (area do cliente, avaliacao)
  *  ambiente  mostra "Ambiente: Web · Desktop" a direita (somente no login)
  *  bare      sem barra superior (portal oculto / pagina inexistente)
  */
