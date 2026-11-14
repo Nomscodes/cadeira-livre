@@ -19,4 +19,8 @@ public interface BloqueioHorarioRepository extends JpaRepository<BloqueioHorario
             UUID barbeariaId, LocalDate data);
 
     Optional<BloqueioHorario> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
+
+    // bloqueios e folgas de um período (o calendário do painel mostra um mês por vez)
+    @EntityGraph(attributePaths = "profissional")
+    List<BloqueioHorario> findAllByBarbeariaIdAndDataBetweenOrderByData(UUID barbeariaId, LocalDate inicio, LocalDate fim);
 }
