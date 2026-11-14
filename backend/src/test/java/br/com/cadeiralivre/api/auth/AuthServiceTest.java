@@ -1,7 +1,10 @@
 package br.com.cadeiralivre.api.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -36,10 +39,13 @@ import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaService;
 import br.com.cadeiralivre.api.common.cripto.Criptografia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.security.JwtService;
 import br.com.cadeiralivre.api.security.Sessao;
 import br.com.cadeiralivre.api.security.SessaoService;
 import br.com.cadeiralivre.api.usuario.Cliente;
+import br.com.cadeiralivre.api.usuario.DonoBarbearia;
 import br.com.cadeiralivre.api.usuario.Papel;
 import br.com.cadeiralivre.api.usuario.Usuario;
 import br.com.cadeiralivre.api.usuario.UsuarioRepository;
@@ -52,6 +58,9 @@ class AuthServiceTest {
 
     @Mock
     private BarbeariaService barbeariaService;
+
+    @Mock
+    private ProfissionalRepository profissionalRepository;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -75,8 +84,8 @@ class AuthServiceTest {
     @BeforeEach
     void preparar() {
         // a Criptografia e o Clock não são mocks, por isso o service é criado na mão
-        authService = new AuthService(usuarioRepository, barbeariaService, passwordEncoder, jwtService,
-                sessaoService, criptografia, Clock.fixed(agora, ZoneOffset.UTC));
+        authService = new AuthService(usuarioRepository, barbeariaService, profissionalRepository, passwordEncoder,
+                jwtService, sessaoService, criptografia, Clock.fixed(agora, ZoneOffset.UTC));
 
         sessaoAberta = new Sessao();
         sessaoAberta.setId(UUID.randomUUID());
@@ -132,6 +141,64 @@ class AuthServiceTest {
 
         assertEquals("DONO", sessao.usuario().papel());
         assertEquals(barbearia.getId(), sessao.usuario().barbeariaId());
+    }
+
+    @Test
+    void donoAutonomoViraProfissionalAdministradorQueAtende() {
+        Barbearia barbearia = new Barbearia(); // atuação padrão: autonomo
+        when(barbeariaService.criar("Barbearia Naoki", "12345678901")).thenReturn(barbearia);
+        when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
+
+        authService.cadastrarDono(new CadastroDonoRequest(
+                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true));
+
+        ArgumentCaptor<Usuario> dono = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(dono.capture());
+        ArgumentCaptor<Profissional> salvo = ArgumentCaptor.forClass(Profissional.class);
+        verify(profissionalRepository).save(salvo.capture());
+        Profissional profissional = salvo.getValue();
+        assertSame(barbearia, profissional.getBarbearia());
+        assertSame(dono.getValue(), profissional.getUsuario()); // o login do dono fica ligado ao profissional
+        assertEquals("Gabriel Naoki", profissional.getNome());
+        assertEquals("Gabriel", profissional.getNomeSocial());
+        assertTrue(profissional.isAdministrador());
+        assertTrue(profissional.isAtende());
+    }
+
+    @Test
+    void donoDeSalaoComEquipeViraAdministradorQueNaoAtende() {
+        Barbearia barbearia = new Barbearia();
+        barbearia.setAtuacao("equipe");
+        when(barbeariaService.criar("Barbearia Naoki", "12345678901")).thenReturn(barbearia);
+        when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
+
+        authService.cadastrarDono(new CadastroDonoRequest(
+                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true));
+
+        ArgumentCaptor<Profissional> salvo = ArgumentCaptor.forClass(Profissional.class);
+        verify(profissionalRepository).save(salvo.capture());
+        assertTrue(salvo.getValue().isAdministrador());
+        assertFalse(salvo.getValue().isAtende());
+        assertTrue(salvo.getValue().getUsuario() instanceof DonoBarbearia);
+    }
+
+    @Test
+    void cadastroDeDonoComEmailJaUsadoNaoCriaProfissional() {
+        when(usuarioRepository.existsByEmailHash(criptografia.hash("naoki@teste.com"))).thenReturn(true);
+
+        assertThrows(ApiException.class, () -> authService.cadastrarDono(new CadastroDonoRequest(
+                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true)));
+
+        verify(profissionalRepository, never()).save(any());
+    }
+
+    @Test
+    void cadastroDeClienteNaoCriaProfissional() {
+        when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
+
+        authService.cadastrarCliente(novoCliente("cliente@teste.com"));
+
+        verify(profissionalRepository, never()).save(any());
     }
 
     @Test
