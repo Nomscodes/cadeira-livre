@@ -17,6 +17,8 @@ import br.com.cadeiralivre.api.barbearia.BarbeariaService;
 import br.com.cadeiralivre.api.common.cripto.Criptografia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorario;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorarioRepository;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.security.JwtService;
 import br.com.cadeiralivre.api.security.Sessao;
@@ -36,6 +38,7 @@ public class AuthService {
     private final UsuarioRepository usuarioRepository;
     private final BarbeariaService barbeariaService;
     private final ProfissionalRepository profissionalRepository;
+    private final ProfissionalHorarioRepository profissionalHorarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final SessaoService sessaoService;
@@ -89,6 +92,8 @@ public class AuthService {
         profissional.setAtende(!"equipe".equals(barbearia.getAtuacao()));
         profissional.setAdministrador(true);
         profissionalRepository.save(profissional);
+        // começa com a semana padrão (seg a sex, 9h às 18h); o dono ajusta em "Calendário e horários"
+        profissionalHorarioRepository.saveAll(ProfissionalHorario.semanaPadrao(profissional));
     }
 
     @Transactional
