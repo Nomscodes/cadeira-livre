@@ -19,6 +19,7 @@ import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.horario.HorarioFuncionamentoRepository;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
+import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.servico.dto.ServicoResponse;
 import br.com.cadeiralivre.api.tenant.TenantContext;
@@ -86,6 +87,50 @@ public class BarbeariaService {
         auditoriaService.registrar(AcaoAuditoria.PORTAL_ALTERADO,
                 "Nome: " + b.getNomeFantasia() + " | Tema: " + b.getTemaId());
         return montarPortal(b);
+    }
+
+    /**
+     * Regra de publicação (RF09): o cliente precisa ter o que escolher. Devolve o que falta; lista vazia = pode publicar.
+     * Só contam serviços ativos e profissionais ativos que atendem clientes.
+     */
+    @Transactional(readOnly = true)
+    public List<String> problemasParaPublicar() {
+        return problemasParaPublicar(buscarDoTenant());
+    }
+
+    /** Liga ou desliga o portal público. Para ligar, a regra de publicação tem que passar. */
+    @Transactional
+    public boolean alterarPublicacao(boolean publico) {
+        Barbearia b = buscarDoTenant();
+        if (publico) {
+            List<String> problemas = problemasParaPublicar(b);
+            if (!problemas.isEmpty()) throw ApiException.invalido("O portal ainda não pode ficar público.", problemas);
+        }
+        if (b.isPublico() != publico) {
+            b.setPublico(publico);
+            // RNF09: publicar e ocultar ficam registrados com o usuário e a hora
+            auditoriaService.registrar(publico ? AcaoAuditoria.PORTAL_PUBLICADO : AcaoAuditoria.PORTAL_OCULTADO, null);
+        }
+        return b.isPublico();
+    }
+
+    private List<String> problemasParaPublicar(Barbearia b) {
+        List<Servico> servicos = servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId());
+        List<Profissional> queAtendem = profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId()).stream()
+                .filter(p -> p.isAtivo() && p.isAtende())
+                .toList();
+
+        List<String> problemas = new ArrayList<>();
+        if (servicos.isEmpty()) problemas.add("Cadastre ao menos um serviço.");
+        if (queAtendem.isEmpty()) {
+            problemas.add("Cadastre ao menos um profissional que atenda clientes (pode ser você mesmo, em Profissionais).");
+        }
+        for (Servico s : servicos) {
+            boolean temQuemFaca = queAtendem.stream()
+                    .anyMatch(p -> p.getServicos().stream().anyMatch(feito -> feito.getId().equals(s.getId())));
+            if (!temQuemFaca) problemas.add("O serviço \"" + s.getNome() + "\" não tem nenhum profissional vinculado.");
+        }
+        return problemas;
     }
 
     // apaga as fotos antigas direto no banco e grava a galeria nova na ordem em que veio
