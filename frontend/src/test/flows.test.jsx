@@ -49,6 +49,7 @@ describe('login', () => {
     const user = userEvent.setup()
     abrir('/login')
     expect(await screen.findByLabelText('e-mail')).toBeInTheDocument()
+    expect(screen.getByText(/admin\/admin \(administrador\) · func\/func \(funcionário\)/)).toBeInTheDocument() // dica do modo de testes
     await user.type(screen.getByLabelText('e-mail'), 'admin')
     await user.type(screen.getByLabelText('senha'), 'admin')
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
@@ -100,24 +101,45 @@ describe('login', () => {
   it('cadastro valida campos antes de enviar', async () => {
     const user = userEvent.setup()
     abrir('/login?aba=cadastro')
-    expect(screen.queryByText('como você atua')).not.toBeInTheDocument() // o backend nao tem esse dado
-    await user.click(await screen.findByRole('button', { name: 'Criar conta' }))
+    const atuacao = await screen.findByRole('group', { name: 'como você atua' })
+    expect(within(atuacao).getByRole('radio', { name: 'Profissional autônomo' })).toBeChecked() // padrao
+    expect(within(atuacao).getByRole('radio', { name: 'Salão com equipe' })).not.toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }))
     expect(await screen.findByText('Informe nome e sobrenome.')).toBeInTheDocument()
     expect(screen.getByText('Aceite os termos para criar a conta.')).toBeInTheDocument()
   })
-  it('cadastro do dono cria a barbearia e abre o painel', async () => {
-    const user = userEvent.setup()
-    abrir('/login?aba=cadastro')
+  /** Preenche o cadastro do dono; a atuacao fica no padrao (autonomo) a nao ser que o teste troque. */
+  async function preencherCadastro(user, email) {
     await user.type(await screen.findByLabelText(/nome completo/), 'Gabriel Naoki')
     await user.type(screen.getByLabelText(/razão social/), 'Barbearia Naoki')
     await user.type(screen.getByLabelText(/CNPJ ou CPF/), '12345678901')
-    await user.type(screen.getByLabelText(/^e-mail/), 'naoki@teste.com')
+    await user.type(screen.getByLabelText(/^e-mail/), email)
     await user.type(screen.getByLabelText(/^senha/), '12345678')
     await user.type(screen.getByLabelText(/confirmação de senha/), '12345678')
     await user.click(screen.getByLabelText(/li e aceito os termos/))
+  }
+  it('cadastro do dono cria a barbearia e abre o painel', async () => {
+    const user = userEvent.setup()
+    abrir('/login?aba=cadastro')
+    await preencherCadastro(user, 'naoki@teste.com')
     await user.click(screen.getByRole('button', { name: 'Criar conta' }))
     await waitFor(() => expect(window.location.pathname).toBe('/painel'), espera)
     expect(JSON.parse(window.localStorage.getItem('cl:staff')).usuario).toMatchObject({ nome: 'Gabriel Naoki', papel: 'DONO' })
+    // autonomo (padrao): o dono ja aparece como profissional que atende
+    expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais).toEqual([
+      expect.objectContaining({ nome: 'Gabriel Naoki', ehAdmin: true, atende: true }),
+    ])
+  })
+  it('cadastro como salao com equipe: o dono so gerencia e nao atende', async () => {
+    const user = userEvent.setup()
+    abrir('/login?aba=cadastro')
+    await preencherCadastro(user, 'naoki.equipe@teste.com')
+    await user.click(screen.getByRole('radio', { name: 'Salão com equipe' }))
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/painel'), espera)
+    expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais).toEqual([
+      expect.objectContaining({ nome: 'Gabriel Naoki', ehAdmin: true, atende: false }),
+    ])
   })
   it('rotas protegidas redirecionam para o login', async () => {
     abrir('/painel')
