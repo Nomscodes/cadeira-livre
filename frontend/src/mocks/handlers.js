@@ -7,7 +7,6 @@ import {
   avisosDeConflito, bloqueioDoDia, calcularItens, diasDoMes, horariosDoDia, statusEfetivo,
 } from './availability'
 
-const CODIGO_TESTE = '123456'
 const db = () => getDb()
 const norm = (t = '') => String(t).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
@@ -15,81 +14,74 @@ const salaoPorSlug = (slug) => db().saloes.find((s) => s.slug === slug)
 const salaoDoStaff = (u) => db().saloes.find((s) => s.id === u.salaoId)
 const nomeProf = (p) => p?.nomeSocial || p?.nome || ''
 
-function sessaoStaff(u) {
-  return {
-    token: `mock.staff.${u.id}`,
-    usuario: { id: u.id, nome: u.nome, papel: u.papel, salaoId: u.salaoId, profissionalId: u.profissionalId },
-  }
+/** Sessao no mesmo formato do backend: { token, usuario: { id, nome, papel, barbeariaId } }. */
+function sessaoDono(u) {
+  return { token: `mock.staff.${u.id}`, usuario: { id: u.id, nome: u.nome, papel: 'DONO', barbeariaId: u.salaoId } }
+}
+function sessaoCliente(c) {
+  return { token: `mock.cliente.${c.telefone}`, usuario: { id: c.id, nome: c.nome, papel: 'CLIENTE', barbeariaId: null } }
 }
 
+const emailEmUso = (email) => db().usuarios.some((u) => norm(u.email) === email) || db().clientes.some((c) => norm(c.email) === email)
+
 /* =========================================================
-   AUTENTICACAO
+   AUTENTICACAO (mesmo contrato do backend: /auth/login, /auth/cadastro, /auth/cadastro/cliente e /auth/logout)
    ========================================================= */
 route('POST', '/auth/login', ({ body }) => {
   const id = norm(body.email).trim()
-  const u = db().usuarios.find((x) => norm(x.email) === id || x.apelidos?.includes(id))
-  if (!u || u.senha !== body.senha) throw new ApiError(401, 'E-mail ou senha incorretos.')
-  return sessaoStaff(u)
+  // no backend so o dono e o cliente tem login; o funcionario existe so na barra do prototipo
+  const dono = db().usuarios.find((x) => x.papel === 'administrador' && (norm(x.email) === id || x.apelidos?.includes(id)))
+  if (dono && dono.senha === body.senha) return sessaoDono(dono)
+  const cliente = db().clientes.find((x) => norm(x.email) === id)
+  if (cliente && cliente.senha === body.senha) return sessaoCliente(cliente)
+  throw new ApiError(401, 'E-mail ou senha incorretos.')
 })
 
 route('POST', '/auth/cadastro', ({ body }) => {
   const email = String(body.email || '').trim().toLowerCase()
   if (!isEmail(email)) throw new ApiError(422, 'Informe um e-mail válido.')
-  if (db().usuarios.some((u) => norm(u.email) === email)) throw new ApiError(409, 'Este e-mail já está cadastrado.')
   if (!body.senha || body.senha.length < 8) throw new ApiError(422, 'A senha precisa ter ao menos 8 caracteres.')
+  if (body.aceitouTermos !== true) throw new ApiError(422, 'Aceite os termos de uso e a política de privacidade.')
+  if (emailEmUso(email)) throw new ApiError(409, 'Este e-mail já está cadastrado.')
 
-  const RESERVADOS = ['login', 'recuperar-senha', 'acesso', 'buscar', 'meus-agendamentos', 'avaliar', 'painel', 'agenda', 'api']
+  const RESERVADOS = ['login', 'acesso', 'buscar', 'meus-agendamentos', 'avaliar', 'painel', 'agenda', 'api']
   let base = slugify(body.razaoSocial || body.nome) || 'meu-salao'
   if (RESERVADOS.includes(base)) base = `${base}-salao`
   let slug = base
   let n = 2
   while (db().saloes.some((s) => s.slug === slug)) slug = `${base}-${n++}`
 
+  // igual ao backend: a barbearia nasce oculta e sem profissionais; o dono cadastra a equipe no painel
   const salaoId = nextId('s')
-  const profId = nextId('p')
   db().saloes.push({
     id: salaoId, slug, nome: body.razaoSocial || body.nome, cidade: '', categoria: 'barbearia',
     temaId: 'vermelho-escuro', publico: false, logo: null, galeria: [], sobre: '', whatsapp: '', endereco: '',
     redes: '', capa: null, horarios: semana([1, 2, 3, 4, 5], '09:00', '18:00'), atendimento: 'local', cancelamentoHoras: 4, funcionariosEditamHorario: false,
-    adminIds: [profId], documento: body.documento, atuacao: body.atuacao,
+    adminIds: [], documento: body.documento,
   })
-  db().profissionais.push({
-    id: profId, salaoId, nome: body.nome, nomeSocial: body.nome.split(' ')[0], whatsapp: '', encaminhar: false,
-    atende: body.atuacao !== 'equipe', // quem tem equipe pode so gerenciar; o autonomo atende por definicao
-    servicoIds: [], horarios: semana([1, 2, 3, 4, 5], '09:00', '18:00'),
-  })
-  const u = { id: nextId('u'), nome: body.nome, email, apelidos: [], senha: body.senha, papel: 'administrador', salaoId, profissionalId: profId }
+  const u = { id: nextId('u'), nome: body.nome, email, apelidos: [], senha: body.senha, papel: 'administrador', salaoId }
   db().usuarios.push(u)
   save()
-  return sessaoStaff(u)
+  return sessaoDono(u)
 })
 
-route('POST', '/auth/recuperar', ({ body }) => {
-  const email = norm(body.email).trim()
-  if (!db().usuarios.some((u) => norm(u.email) === email)) throw new ApiError(404, 'Este e-mail não está cadastrado.')
-  return null
-})
-route('POST', '/auth/recuperar/codigo', ({ body }) => {
-  if (body.codigo !== CODIGO_TESTE) throw new ApiError(422, 'Código incorreto. Confira o e-mail e tente de novo.')
-  return null
-})
-route('POST', '/auth/recuperar/redefinir', ({ body }) => {
-  if (body.codigo !== CODIGO_TESTE) throw new ApiError(422, 'Código incorreto.')
-  const u = db().usuarios.find((x) => norm(x.email) === norm(body.email))
-  if (!u) throw new ApiError(404, 'Este e-mail não está cadastrado.')
-  if (!body.novaSenha || body.novaSenha.length < 8) throw new ApiError(422, 'A senha precisa ter ao menos 8 caracteres.')
-  // No mock, as contas de teste (admin/func) mantem a senha para nao travar as demonstracoes.
-  if (!u.apelidos?.length) { u.senha = body.novaSenha; save() }
-  return null
+route('POST', '/auth/cadastro/cliente', ({ body }) => {
+  const email = String(body.email || '').trim().toLowerCase()
+  if (String(body.nome || '').trim().length < 2) throw new ApiError(422, 'Informe seu nome.')
+  if (!isEmail(email)) throw new ApiError(422, 'Informe um e-mail válido.')
+  if (![10, 11].includes(digits(body.telefone).length)) throw new ApiError(422, 'Informe o telefone com DDD.')
+  if (!body.senha || body.senha.length < 8) throw new ApiError(422, 'A senha precisa ter ao menos 8 caracteres.')
+  if (body.aceitouTermos !== true) throw new ApiError(422, 'Aceite os termos de uso e a política de privacidade.')
+  if (emailEmUso(email)) throw new ApiError(409, 'Este e-mail já está cadastrado.')
+  const c = { id: nextId('c'), nome: body.nome.trim(), email, telefone: digits(body.telefone), senha: body.senha }
+  db().clientes.push(c)
+  save()
+  return sessaoCliente(c)
 })
 
-route('POST', '/acesso/codigo', ({ body }) => {
-  if (!String(body.contato || '').trim()) throw new ApiError(422, 'Informe seu WhatsApp ou e-mail.')
+route('POST', '/auth/logout', (ctx) => {
+  if (!ctx.session) throw new ApiError(401, 'Faça login para continuar.')
   return null
-})
-route('POST', '/acesso/confirmar', ({ body }) => {
-  if (body.codigo !== CODIGO_TESTE) throw new ApiError(422, 'Código incorreto. Confira a mensagem e tente de novo.')
-  return { token: `mock.cliente.${encodeURIComponent(body.contato)}`, contato: body.contato }
 })
 
 /** Eventos do sistema avisam o administrador e cada profissional envolvido (novo agendamento, cancelamento do cliente). */
