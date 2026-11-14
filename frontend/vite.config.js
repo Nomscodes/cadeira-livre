@@ -11,7 +11,8 @@ import react from '@vitejs/plugin-react'
  */
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_')
-  const mock = env.VITE_USE_MOCK !== 'false'
+  // os testes rodam sempre na API simulada, mesmo que o .env local aponte para o backend real
+  const mock = mode === 'test' || env.VITE_USE_MOCK !== 'false'
   const modoTeste = mock && env.VITE_MODO_TESTE !== 'false'
   const mostrarProto = modoTeste && env.VITE_PROTO_BAR !== 'false' && mode !== 'test' // a barra tem teste proprio
   return {
@@ -23,6 +24,7 @@ export default defineConfig(({ mode }) => {
     },
     test: {
       environment: 'jsdom',
+      env: { VITE_USE_MOCK: 'true' },
       setupFiles: ['./src/test/setup.js'],
       globals: true,
       css: false,
