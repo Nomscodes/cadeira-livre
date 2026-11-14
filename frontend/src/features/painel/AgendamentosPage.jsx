@@ -5,6 +5,9 @@ import { api } from '../../lib/http'
 import { useAsync } from '../../lib/hooks'
 import { formatDateBR } from '../../lib/dates'
 import { digits, money } from '../../lib/format'
+import { STATUS, grupoDoStatus } from '../../lib/status'
+import { useToast } from '../../context/ToastContext'
+import Button from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import StatusChip from '../../components/ui/StatusChip'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States'
@@ -12,8 +15,29 @@ import HorariosPanel from './HorariosPanel'
 
 const FILTROS = [['confirmado', 'confirmados'], ['finalizado', 'finalizados'], ['cancelado', 'cancelados']]
 
-function Detalhe({ a, onClose }) {
+// ações do dono em cada status da V7: o pedido pendente é aprovado ou recusado; o aprovado é concluído depois do atendimento
+const ACOES = {
+  [STATUS.PENDENTE]: [['aprovar', 'Aprovar', 'Agendamento aprovado. O cliente foi avisado.'], ['recusar', 'Recusar', 'Pedido recusado. O cliente foi avisado.']],
+  [STATUS.APROVADO]: [['concluir', 'Concluir atendimento', 'Atendimento concluído. O cliente já pode avaliar.']],
+}
+
+function Detalhe({ a, onClose, onAlterado }) {
+  const toast = useToast()
+  const [busy, setBusy] = useState(null)
   const msg = (nome) => `Olá ${nome}, o cliente ${a.cliente} marcou um horário em ${formatDateBR(a.data)} às ${a.hora} para ${a.servicos}.`
+  const executar = async (acao, sucesso) => {
+    setBusy(acao)
+    try {
+      await api.post(`/painel/agendamentos/${a.id}/${acao}`, {}, { as: 'staff' })
+      toast.success(sucesso)
+      onAlterado()
+      onClose()
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setBusy(null)
+    }
+  }
   return (
     <Modal title="Detalhe do agendamento" onClose={onClose}>
       <div className="modal-row"><span>cliente</span><b>{a.cliente}</b></div>
@@ -23,6 +47,14 @@ function Detalhe({ a, onClose }) {
       <div className="modal-row"><span>data e hora</span><b>{formatDateBR(a.data)} às {a.hora}</b></div>
       <div className="modal-row"><span>valor</span><b>{money(a.valor)}</b></div>
       <div className="modal-row"><span>status</span><StatusChip status={a.status} /></div>
+      {ACOES[a.status] && (
+        <div className="modal-actions">
+          {ACOES[a.status].map(([acao, rotulo, sucesso]) => (
+            <Button key={acao} variant={acao === 'recusar' ? 'danger-outline' : undefined} loading={busy === acao}
+              disabled={busy !== null} onClick={() => executar(acao, sucesso)}>{rotulo}</Button>
+          ))}
+        </div>
+      )}
       <div className="modal-actions" style={{ flexDirection: 'column' }}>
         {a.encaminhar.length === 0 && <p className="hint" style={{ margin: 0 }}>Nenhum dos profissionais deste atendimento está com o encaminhamento por WhatsApp ativado.</p>}
         {a.encaminhar.map((p) => (
@@ -36,15 +68,16 @@ function Detalhe({ a, onClose }) {
   )
 }
 
-function Lista({ data }) {
+function Lista({ data, onAlterado }) {
   const [ativos, setAtivos] = useState(new Set(['confirmado', 'finalizado', 'cancelado']))
   const [aberto, setAberto] = useState(null)
   // proximos atendimentos primeiro (do mais proximo ao mais distante); depois finalizados e cancelados, do mais recente ao mais antigo
+  // os status da V7 entram no grupo certo: pendente e aprovado = confirmados; concluido = finalizados; recusado = cancelados
   const ordem = { confirmado: 0, finalizado: 1, cancelado: 2 }
-  const itens = data.filter((a) => ativos.has(a.status)).sort((a, b) => {
-    if (a.status !== b.status) return ordem[a.status] - ordem[b.status]
+  const itens = data.map((a) => ({ ...a, grupo: grupoDoStatus(a.status) })).filter((a) => ativos.has(a.grupo)).sort((a, b) => {
+    if (a.grupo !== b.grupo) return ordem[a.grupo] - ordem[b.grupo]
     const cmp = (a.data + a.hora).localeCompare(b.data + b.hora)
-    return a.status === 'confirmado' ? cmp : -cmp
+    return a.grupo === 'confirmado' ? cmp : -cmp
   })
   const alternar = (k) => setAtivos((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n })
 
@@ -76,7 +109,7 @@ function Lista({ data }) {
         </div>
       )}
       <p className="hint" style={{ marginTop: 18 }}>O Cadeira Livre não é responsável por transações financeiras entre cliente e salão. O sistema não processa pagamentos.</p>
-      {aberto && <Detalhe a={aberto} onClose={() => setAberto(null)} />}
+      {aberto && <Detalhe a={aberto} onClose={() => setAberto(null)} onAlterado={onAlterado} />}
     </div>
   )
 }
@@ -95,7 +128,7 @@ export default function AgendamentosPage() {
       </div>
       {loading && !data && <Loading />}
       {error && <ErrorState error={error} onRetry={reload} />}
-      {data && (aba === 'lista' ? <Lista data={data} /> : <HorariosPanel agendamentos={data} />)}
+      {data && (aba === 'lista' ? <Lista data={data} onAlterado={reload} /> : <HorariosPanel agendamentos={data} />)}
     </div>
   )
 }

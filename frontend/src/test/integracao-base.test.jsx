@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import StatusChip from '../components/ui/StatusChip'
 import { hhmm } from '../lib/dates'
 import { STATUS, grupoDoStatus } from '../lib/status'
@@ -172,5 +173,45 @@ describe('meus agendamentos com os status do backend', () => {
     expect(within(concluido).getByText('concluído')).toBeInTheDocument()
     expect(within(concluido).getByRole('link', { name: 'avaliar' })).toHaveAttribute('href', '/avaliar/a3')
     expect(fetchFalso.mock.calls[0][0]).toBe('http://localhost:8080/api/cliente/agendamentos')
+  })
+})
+
+describe('agendamentos do painel com os status do backend', () => {
+  it('o dono aprova um pedido pendente pelo detalhe e a lista recarrega', async () => {
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'token-do-dono', usuario: { nome: 'Gabriel Naoki', papel: 'DONO' } }))
+    const base = { whatsapp: '62988887777', profissionais: 'Naoki', profissionalIds: ['p1'], valor: 40, encaminhar: [] }
+    const lista = [
+      { ...base, id: 'a1', cliente: 'Gabriel Naoki', servicos: 'Corte', data: '2026-11-18', hora: '14:00', status: 'PENDENTE' },
+      { ...base, id: 'a2', cliente: 'Cliente Aprovado', servicos: 'Barba', data: '2026-11-19', hora: '10:00', status: 'APROVADO' },
+      { ...base, id: 'a3', cliente: 'Cliente Recusado', servicos: 'Corte', data: '2026-11-09', hora: '11:00', status: 'RECUSADO' },
+    ]
+    const fetchFalso = vi.fn(async (url, opcoes) => resposta(200, opcoes.method === 'POST' ? { ...lista[0], status: 'APROVADO' } : lista))
+    await apiReal(fetchFalso)
+    const { MemoryRouter } = await import('react-router-dom')
+    const { ToastProvider } = await import('../context/ToastContext')
+    const { default: AgendamentosPage } = await import('../features/painel/AgendamentosPage')
+    const user = userEvent.setup()
+
+    render(<MemoryRouter><ToastProvider><AgendamentosPage /></ToastProvider></MemoryRouter>)
+
+    // o recusado fica junto dos cancelados; o pendente e o aprovado, nos confirmados
+    expect(await screen.findByText('pendente')).toBeInTheDocument()
+    expect(screen.getByText('aprovado')).toBeInTheDocument()
+    expect(screen.getByText('recusado')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Cliente Aprovado'))
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Concluir atendimento' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Fechar janela' }))
+
+    await user.click(screen.getByText('Gabriel Naoki'))
+    const detalhe = screen.getByRole('dialog')
+    expect(within(detalhe).getByRole('button', { name: 'Recusar' })).toBeInTheDocument()
+    await user.click(within(detalhe).getByRole('button', { name: 'Aprovar' }))
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledWith(
+      'http://localhost:8080/api/painel/agendamentos/a1/aprovar', expect.objectContaining({ method: 'POST' })))
+    expect(await screen.findByText('Agendamento aprovado. O cliente foi avisado.')).toBeInTheDocument()
+    // depois da ação, a lista é buscada de novo
+    await waitFor(() => expect(fetchFalso.mock.calls.filter(([, o]) => o.method === 'GET').length).toBe(2))
   })
 })
