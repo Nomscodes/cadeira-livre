@@ -4,12 +4,14 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import br.com.cadeiralivre.api.agendamento.dto.AgendamentoCriadoResponse;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoRequest;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
 import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
@@ -22,6 +24,8 @@ import br.com.cadeiralivre.api.notificacao.TipoNotificacao;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.security.UsuarioLogado;
+import br.com.cadeiralivre.api.servico.Combo;
+import br.com.cadeiralivre.api.servico.ComboRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
@@ -43,6 +47,7 @@ public class AgendamentoService {
     private final BarbeariaRepository barbeariaRepository;
     private final ServicoRepository servicoRepository;
     private final ProfissionalRepository profissionalRepository;
+    private final ComboRepository comboRepository;
     private final DisponibilidadeService disponibilidadeService;
     private final AuditoriaService auditoriaService;
     private final ClienteRepository clienteRepository;
@@ -51,37 +56,40 @@ public class AgendamentoService {
 
     /** Rota pública: a barbearia vem do slug da URL. Se o cliente estiver logado, o agendamento entra no histórico dele. */
     @Transactional
-    public AgendamentoResponse solicitar(String slug, AgendamentoRequest req) {
+    public AgendamentoCriadoResponse solicitar(String slug, AgendamentoRequest req) {
         Barbearia barbearia = barbeariaRepository.findBySlug(slug)
                 .filter(Barbearia::isPublico)
                 .orElseThrow(() -> ApiException.naoEncontrado("Salão não encontrado."));
-
-        Servico servico = servicoRepository.findByIdAndBarbeariaId(req.servicoId(), barbearia.getId())
-                .filter(Servico::isAtivo)
-                .orElseThrow(() -> ApiException.invalido("Serviço inválido para este salão."));
-
-        // o profissional tem que ser deste salão, estar ativo e fazer o serviço escolhido
-        Profissional profissional = profissionalRepository.findByIdAndBarbeariaId(req.profissionalId(), barbearia.getId())
-                .filter(Profissional::isAtivo)
-                .filter(p -> fazOServico(p, servico))
-                .orElseThrow(() -> ApiException.invalido("Profissional inválido para o serviço escolhido."));
-
-        LocalTime fim = req.hora().plusMinutes(servico.getDuracaoMinutos());
-        if (!fim.isAfter(req.hora())) throw ApiException.invalido("O atendimento não pode atravessar a meia-noite.");
-        if (LocalDateTime.of(req.data(), req.hora()).isBefore(LocalDateTime.now(clock))) {
-            throw ApiException.invalido("Escolha um horário futuro.");
-        }
-        // mesmas regras da disponibilidade (RF13): funcionamento, bloqueios, folgas e agendamentos aprovados
-        if (!disponibilidadeService.estaLivre(barbearia, servico, profissional, req.data(), req.hora())) {
-            throw ApiException.conflito("Esse horário não está disponível. Escolha outro horário.");
+        String whatsapp = req.clienteWhats().trim();
+        if (whatsapp.replaceAll("\\D", "").length() < 10) {
+            throw ApiException.invalido("Informe seu nome e um WhatsApp válido, com DDD.");
         }
 
         Agendamento a = new Agendamento();
         a.setBarbearia(barbearia);
-        a.setServico(servico);
-        a.setProfissional(profissional);
+        for (int ordem = 0; ordem < req.itens().size(); ordem++) {
+            a.adicionarItem(item(barbearia, req.itens().get(ordem), ordem));
+        }
+
+        // a duração é a soma dos itens; os profissionais são todos os dos itens
+        LocalTime fim = req.hora().plusMinutes(a.duracaoMinutos());
+        if (!fim.isAfter(req.hora())) throw ApiException.invalido("O atendimento não pode atravessar a meia-noite.");
+        if (LocalDateTime.of(req.data(), req.hora()).isBefore(LocalDateTime.now(clock))) {
+            throw ApiException.invalido("Escolha um horário futuro.");
+        }
+        List<Profissional> profissionais = a.getItens().stream().map(AgendamentoItem::getProfissional).distinct().toList();
+        // mesmas regras do calendário (RF13): funcionamento, bloqueios, folgas, almoço e agendamentos aprovados
+        if (!disponibilidadeService.estaLivre(barbearia, profissionais, req.data(), req.hora(), a.duracaoMinutos())) {
+            throw ApiException.conflito("Esse horário acabou de ser ocupado. Escolha outro horário.");
+        }
+
+        // o primeiro item é o "principal": a agenda, as notificações e o RF21 usam o serviço e o profissional dele
+        AgendamentoItem principal = a.getItens().get(0);
+        a.setServico(principal.getServico() != null ? principal.getServico() : primeiroServico(principal.getCombo()));
+        a.setProfissional(principal.getProfissional());
+        a.setValor(a.somaDosItens());
         a.setClienteNome(req.clienteNome().trim());
-        a.setClienteTelefone(req.clienteTelefone().trim());
+        a.setClienteTelefone(whatsapp);
         a.setData(req.data());
         a.setHoraInicio(req.hora());
         a.setHoraFim(fim);
@@ -94,7 +102,39 @@ public class AgendamentoService {
         }
         Agendamento salvo = agendamentoRepository.save(a);
         notificacaoService.paraDono(salvo, TipoNotificacao.NOVO_AGENDAMENTO);
-        return AgendamentoResponse.de(salvo);
+        return AgendamentoCriadoResponse.de(salvo);
+    }
+
+    // cada item é um serviço OU um combo do salão, com um profissional que atende e faz aquilo
+    private AgendamentoItem item(Barbearia barbearia, AgendamentoRequest.Item pedido, int ordem) {
+        Profissional profissional = profissionalRepository.findByIdAndBarbeariaId(pedido.profissionalId(), barbearia.getId())
+                .filter(p -> p.isAtivo() && p.isAtende())
+                .orElseThrow(() -> ApiException.invalido("Este profissional não atende clientes."));
+        boolean temServico = pedido.servicoId() != null;
+        boolean temCombo = pedido.comboId() != null;
+        if (temServico == temCombo) throw ApiException.invalido("Cada item precisa de um serviço ou de um combo.");
+
+        if (temServico) {
+            Servico servico = servicoRepository.findByIdAndBarbeariaId(pedido.servicoId(), barbearia.getId())
+                    .filter(Servico::isAtivo)
+                    .orElseThrow(() -> ApiException.invalido("Serviço inválido para este salão."));
+            if (!fazOServico(profissional, servico)) {
+                throw ApiException.invalido("Profissional inválido para o serviço escolhido.");
+            }
+            return AgendamentoItem.doServico(servico, profissional, ordem);
+        }
+        Combo combo = comboRepository.findByIdAndBarbeariaIdAndAtivoTrue(pedido.comboId(), barbearia.getId())
+                .orElseThrow(() -> ApiException.invalido("Combo inválido para este salão."));
+        if (combo.getProfissionais().stream().noneMatch(p -> p.getId().equals(profissional.getId()))) {
+            throw ApiException.invalido("Profissional inválido para o combo escolhido.");
+        }
+        return AgendamentoItem.doCombo(combo, profissional, ordem);
+    }
+
+    // o serviço "principal" de um combo é o primeiro em ordem de nome
+    private Servico primeiroServico(Combo combo) {
+        return combo.getServicos().stream().min(Comparator.comparing(Servico::getNome))
+                .orElseThrow(() -> ApiException.invalido("Combo sem serviços."));
     }
 
     /** Rotas do painel: a barbearia vem do JWT (TenantContext). Com data, mostra só a agenda daquele dia. */
