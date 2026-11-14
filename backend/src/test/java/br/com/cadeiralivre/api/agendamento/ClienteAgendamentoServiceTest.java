@@ -1,11 +1,14 @@
 package br.com.cadeiralivre.api.agendamento;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -26,6 +29,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import br.com.cadeiralivre.api.agendamento.dto.MeuAgendamentoResponse;
+import br.com.cadeiralivre.api.avaliacao.AvaliacaoRepository;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.notificacao.NotificacaoService;
@@ -42,6 +46,9 @@ class ClienteAgendamentoServiceTest {
     @Mock
     private NotificacaoService notificacaoService;
 
+    @Mock
+    private AvaliacaoRepository avaliacaoRepository;
+
     private ClienteAgendamentoService clienteAgendamentoService;
 
     // "Agora" fixo nos testes: 10/11/2026 às 09:00 no horário de Brasília
@@ -53,18 +60,25 @@ class ClienteAgendamentoServiceTest {
     @BeforeEach
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
-        clienteAgendamentoService = new ClienteAgendamentoService(agendamentoRepository, notificacaoService, relogio);
+        clienteAgendamentoService = new ClienteAgendamentoService(agendamentoRepository, avaliacaoRepository,
+                notificacaoService, relogio);
 
         Barbearia barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
         barbearia.setNomeFantasia("Barbearia Teste");
         barbearia.setSlug("barbearia-teste");
+        barbearia.setTelefone("62999990000");
+        barbearia.setCancelamentoHoras(1); // prazo de cancelamento deste salão
 
         Servico corte = new Servico();
         corte.setNome("Corte");
+        corte.setPreco(new BigDecimal("40.00"));
+        corte.setDuracaoMinutos(30);
 
         Profissional rafael = new Profissional();
+        rafael.setId(UUID.randomUUID());
         rafael.setNome("Rafael Lima");
+        rafael.setNomeSocial("Rafael");
 
         // agendamento do João para amanhã às 10:00
         agendamento = new Agendamento();
@@ -76,6 +90,8 @@ class ClienteAgendamentoServiceTest {
         agendamento.setHoraInicio(LocalTime.of(10, 0));
         agendamento.setHoraFim(LocalTime.of(10, 30));
         agendamento.setStatus(StatusAgendamento.PENDENTE);
+        agendamento.adicionarItem(AgendamentoItem.doServico(corte, rafael, 0));
+        agendamento.setValor(new BigDecimal("40.00"));
     }
 
     @AfterEach
@@ -92,9 +108,56 @@ class ClienteAgendamentoServiceTest {
         List<MeuAgendamentoResponse> historico = clienteAgendamentoService.listarMeus();
 
         assertEquals(1, historico.size());
-        assertEquals("Barbearia Teste", historico.get(0).barbearia());
-        assertEquals("barbearia-teste", historico.get(0).slug());
-        assertEquals("Rafael Lima", historico.get(0).profissional());
+        MeuAgendamentoResponse meu = historico.get(0);
+        assertEquals("Barbearia Teste", meu.salao().nome());
+        assertEquals("barbearia-teste", meu.salao().slug());
+        assertEquals("62999990000", meu.salao().whatsapp());
+        assertEquals("Corte", meu.servicos());
+        assertEquals("Rafael", meu.profissionais()); // o cliente vê o nome social
+        assertEquals("10:00", meu.hora());
+        assertEquals(new BigDecimal("40.00"), meu.valor());
+        assertFalse(meu.avaliado());
+        assertTrue(meu.podeCancelar());
+        assertEquals(1, meu.cancelamentoHoras());
+    }
+
+    @Test
+    void detalheDeAgendamentoDeOutroClienteDevolve404() {
+        logarComo("ROLE_CLIENTE");
+        when(agendamentoRepository.findByIdAndClienteId(agendamento.getId(), joaoId)).thenReturn(Optional.empty());
+
+        ApiException erro = assertThrows(ApiException.class, () -> clienteAgendamentoService.detalhe(agendamento.getId()));
+
+        assertEquals(404, erro.getStatus().value());
+    }
+
+    @Test
+    void detalheMostraSeJaFoiAvaliado() {
+        agendamento.setStatus(StatusAgendamento.CONCLUIDO);
+        logarComo("ROLE_CLIENTE");
+        when(agendamentoRepository.findByIdAndClienteId(agendamento.getId(), joaoId)).thenReturn(Optional.of(agendamento));
+        when(avaliacaoRepository.existsByAgendamentoId(agendamento.getId())).thenReturn(true);
+
+        MeuAgendamentoResponse meu = clienteAgendamentoService.detalhe(agendamento.getId());
+
+        assertTrue(meu.avaliado());
+        assertFalse(meu.podeCancelar()); // concluído não se cancela
+    }
+
+    @Test
+    void prazoDeCancelamentoEhODoSalao() {
+        // o salão pede 4 horas; o agendamento é hoje às 12:00 e "agora" são 09:00 (faltam 3 horas)
+        agendamento.getBarbearia().setCancelamentoHoras(4);
+        agendamento.setData(LocalDate.of(2026, 11, 10));
+        agendamento.setHoraInicio(LocalTime.of(12, 0));
+        logarComo("ROLE_CLIENTE");
+        when(agendamentoRepository.findByIdAndClienteId(agendamento.getId(), joaoId)).thenReturn(Optional.of(agendamento));
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> clienteAgendamentoService.cancelar(agendamento.getId()));
+
+        assertEquals("O prazo para cancelar já passou. Fale com o salão pelo WhatsApp.", erro.getMessage());
+        assertEquals(StatusAgendamento.PENDENTE, agendamento.getStatus());
     }
 
     @Test

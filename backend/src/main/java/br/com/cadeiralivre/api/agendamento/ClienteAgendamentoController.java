@@ -25,6 +25,11 @@ public class ClienteAgendamentoController {
         return clienteAgendamentoService.listarMeus();
     }
 
+    @GetMapping("/{id}")
+    public MeuAgendamentoResponse detalhe(@PathVariable UUID id) {
+        return clienteAgendamentoService.detalhe(id);
+    }
+
     @PostMapping("/{id}/cancelar")
     public MeuAgendamentoResponse cancelar(@PathVariable UUID id) {
         return clienteAgendamentoService.cancelar(id);
