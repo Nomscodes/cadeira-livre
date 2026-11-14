@@ -74,3 +74,41 @@ export const DEFAULT_THEME_ID = 'vermelho-escuro'
 
 export const getTheme = (id) => THEMES.find((t) => t.id === id) || THEMES.find((t) => t.id === DEFAULT_THEME_ID)
 export const themesByGroup = (grupo) => THEMES.filter((t) => t.grupo === grupo)
+
+// cor clara pede texto escuro em cima (mesma ideia dos temas pastel)
+function corClara(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.6
+}
+
+/**
+ * Tema a partir da cor que o backend guarda no portal (corPrimaria, no formato #RRGGBB).
+ * Se a cor for a de um dos 14 temas, usa o tema pronto. Se for outra cor, monta os tokens
+ * misturando a cor com branco e preto. Sem cor valida, fica o tema padrao.
+ */
+export function temaDaCor(cor) {
+  const hex = String(cor || '').toUpperCase()
+  const pronto = THEMES.find((t) => t.swatch.toUpperCase() === hex)
+  if (pronto) return pronto
+  if (!/^#[0-9A-F]{6}$/.test(hex)) return getTheme(DEFAULT_THEME_ID)
+
+  const clara = corClara(hex)
+  const escura = `color-mix(in srgb, ${hex} 55%, #000000)`
+  return {
+    id: 'personalizado',
+    nome: 'Cor personalizada',
+    cor: hex,
+    grupo: 'personalizado',
+    swatch: hex,
+    tokens: {
+      '--c-primary': hex,
+      '--c-primary-hover': `color-mix(in srgb, ${hex} 82%, #000000)`,
+      '--c-on-primary': clara ? '#2A1F22' : '#FFFFFF',
+      '--c-ink': clara ? escura : hex,
+      '--c-ink-strong': escura,
+      '--c-soft': `color-mix(in srgb, ${hex} 10%, #FFFFFF)`,
+      '--c-accent': `color-mix(in srgb, ${hex} 60%, #FFFFFF)`,
+      '--c-line': `color-mix(in srgb, ${hex} 22%, #FFFFFF)`,
+    },
+  }
+}
