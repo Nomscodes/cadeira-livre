@@ -3,12 +3,15 @@ import { api } from '../lib/http'
 import { getDb, resetMock } from '../mocks/db'
 import { addDaysISO, todayISO, weekdayOf, monthKey } from '../lib/dates'
 
-const staff = async (email = 'admin', senha = 'admin', papel = 'administrador') => {
-  const s = await api.post('/auth/login', { email, senha, papel })
+/** Login do dono da barbearia de exemplo (mesmo formato de sessao do backend). */
+const staff = async (email = 'admin', senha = 'admin') => {
+  const s = await api.post('/auth/login', { email, senha })
   window.localStorage.setItem('cl:staff', JSON.stringify(s))
   return s
 }
-const cliente = () => window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', contato: '62955550000' }))
+/** O funcionario nao tem login no backend; ele so existe no prototipo, entao entra direto pelo token simulado. */
+const funcionario = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'funcionario' } }))
+const cliente = () => window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
 
 /** primeiro dia util dentro de `limite` dias a partir de amanha que o salao tenha horario livre */
 async function primeiroHorarioLivre(profissionais, duracao) {
@@ -25,33 +28,53 @@ async function primeiroHorarioLivre(profissionais, duracao) {
 beforeEach(() => resetMock())
 
 describe('autenticacao', () => {
-  it('entra com as contas de teste', async () => {
-    const s = await api.post('/auth/login', { email: 'admin', senha: 'admin', papel: 'administrador' })
-    expect(s.usuario.papel).toBe('administrador')
-    const f = await api.post('/auth/login', { email: 'func@teste.com', senha: 'func', papel: 'funcionario' })
-    expect(f.usuario.papel).toBe('funcionario')
+  it('dono e cliente entram e recebem a sessao no formato do backend', async () => {
+    const dono = await api.post('/auth/login', { email: 'admin', senha: 'admin' })
+    expect(dono.token).toEqual(expect.any(String))
+    expect(dono.usuario).toEqual({ id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1' })
+    const gabriel = await api.post('/auth/login', { email: 'cliente@teste.com', senha: '12345678' })
+    expect(gabriel.usuario).toEqual({ id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null })
   })
-  it('recusa senha errada', async () => {
+  it('recusa senha errada e o funcionario, que nao tem login no backend', async () => {
     await expect(api.post('/auth/login', { email: 'admin', senha: 'x' })).rejects.toMatchObject({ status: 401 })
+    await expect(api.post('/auth/login', { email: 'func@teste.com', senha: 'func' })).rejects.toMatchObject({ status: 401, message: 'E-mail ou senha incorretos.' })
   })
-  it('o cargo vem do cadastro do usuario, nao do formulario', async () => {
-    expect((await api.post('/auth/login', { email: 'admin', senha: 'admin' })).usuario.papel).toBe('administrador')
-    expect((await api.post('/auth/login', { email: 'func@teste.com', senha: 'func' })).usuario.papel).toBe('funcionario')
+  it('o papel vem do cadastro do usuario, nao do formulario', async () => {
     // mesmo que alguem envie um papel diferente, o servidor ignora e usa o do cadastro
-    expect((await api.post('/auth/login', { email: 'admin', senha: 'admin', papel: 'funcionario' })).usuario.papel).toBe('administrador')
+    expect((await api.post('/auth/login', { email: 'admin', senha: 'admin', papel: 'CLIENTE' })).usuario.papel).toBe('DONO')
   })
-  it('cadastro cria salao oculto e impede e-mail repetido', async () => {
-    const dados = { nome: 'Joao Silva', razaoSocial: 'Painel', documento: '12345678901', email: 'joao@x.com', atuacao: 'autonomo', senha: '12345678' }
-    const s = await api.post('/auth/cadastro', dados)
-    expect(s.usuario.papel).toBe('administrador')
+  it('cadastro do dono exige o aceite dos termos, cria a barbearia oculta e impede e-mail repetido', async () => {
+    const dados = { nome: 'Joao Silva', razaoSocial: 'Painel', documento: '12345678901', email: 'joao@x.com', senha: '12345678' }
+    await expect(api.post('/auth/cadastro', dados)).rejects.toMatchObject({ status: 422 })
+    const s = await api.post('/auth/cadastro', { ...dados, aceitouTermos: true })
+    expect(s.usuario).toMatchObject({ nome: 'Joao Silva', papel: 'DONO', barbeariaId: expect.any(String) })
     const r = await api.get('/saloes/painel-salao').catch((e) => e)
     expect(r.slug).toBe('painel-salao') // slug reservado ganha sufixo
     expect(r.publico).toBe(false)
-    await expect(api.post('/auth/cadastro', dados)).rejects.toMatchObject({ status: 409 })
+    await expect(api.post('/auth/cadastro', { ...dados, aceitouTermos: true })).rejects.toMatchObject({ status: 409 })
+  })
+  it('cadastro do cliente valida os dados, impede e-mail repetido e ja entra logado', async () => {
+    const dados = { nome: 'Ana Souza', email: 'ana@x.com', telefone: '62988887777', senha: '12345678', aceitouTermos: true }
+    await expect(api.post('/auth/cadastro/cliente', { ...dados, telefone: '123' })).rejects.toMatchObject({ status: 422 })
+    await expect(api.post('/auth/cadastro/cliente', { ...dados, aceitouTermos: false })).rejects.toMatchObject({ status: 422 })
+    const s = await api.post('/auth/cadastro/cliente', dados)
+    expect(s.usuario).toMatchObject({ nome: 'Ana Souza', papel: 'CLIENTE', barbeariaId: null })
+    // o e-mail e unico entre donos e clientes (RF03)
+    await expect(api.post('/auth/cadastro/cliente', dados)).rejects.toMatchObject({ status: 409 })
+    await expect(api.post('/auth/cadastro/cliente', { ...dados, email: 'admin@teste.com' })).rejects.toMatchObject({ status: 409 })
+    // a conta nova ja consegue fazer login
+    expect((await api.post('/auth/login', { email: 'ana@x.com', senha: '12345678' })).usuario.papel).toBe('CLIENTE')
+  })
+  it('logout exige estar logado (RF05)', async () => {
+    await expect(api.post('/auth/logout', undefined, { as: 'staff' })).rejects.toMatchObject({ status: 401 })
+    await staff()
+    expect(await api.post('/auth/logout', undefined, { as: 'staff' })).toBeNull()
+    cliente()
+    expect(await api.post('/auth/logout', undefined, { as: 'cliente' })).toBeNull()
   })
   it('painel exige sessao e papel', async () => {
     await expect(api.get('/painel/portal', { as: 'staff' })).rejects.toMatchObject({ status: 401 })
-    await staff('func', 'func', 'funcionario')
+    funcionario()
     await expect(api.get('/painel/servicos', { as: 'staff' })).rejects.toMatchObject({ status: 403 })
   })
 })
@@ -152,7 +175,7 @@ describe('painel', () => {
 
 describe('resumo do funcionario', () => {
   it('devolve perfil, indicadores e todos os agendamentos dele', async () => {
-    await staff('func', 'func', 'funcionario')
+    funcionario()
     const r = await api.get('/agenda/resumo', { as: 'staff' })
     expect(r.profissional.nome).toBe('Rafael Lima')
     expect(r.profissional.servicos).toEqual(['Corte de cabelo', 'Barba'])
@@ -174,16 +197,16 @@ describe('resumo do funcionario', () => {
 
 describe('agenda do funcionario', () => {
   it('mostra colegas e respeita permissao de edicao', async () => {
-    await staff('func', 'func', 'funcionario')
+    funcionario()
     await staff()
     const a2 = (await api.get('/painel/agendamentos', { as: 'staff' })).find((a) => a.id === 'a2')
-    await staff('func', 'func', 'funcionario')
+    funcionario()
     const { agendamentos } = await api.get('/agenda', { as: 'staff', query: { mes: a2.data.slice(0, 7) } })
     expect(agendamentos.find((a) => a.id === 'a2').colegas).toEqual(['Juliana'])
     await api.put('/agenda/descansos', { data: addDaysISO(todayISO(), 1), hora: '15:00', descanso: true }, { as: 'staff' })
     await staff()
     await api.put('/painel/configuracoes', { atendimento: 'local', cancelamentoHoras: 4, funcionariosEditamHorario: false }, { as: 'staff' })
-    await staff('func', 'func', 'funcionario')
+    funcionario()
     await expect(api.put('/agenda/descansos', { data: addDaysISO(todayISO(), 1), hora: '16:00', descanso: true }, { as: 'staff' })).rejects.toMatchObject({ status: 403 })
   })
 })
@@ -252,7 +275,7 @@ describe('horarios do salao e da equipe', () => {
     await expect(api.put('/painel/horarios/profissionais/p1', { horarios: { 1: { ativo: true } } }, { as: 'staff' })).rejects.toMatchObject({ status: 422 })
   })
   it('so o administrador edita horarios', async () => {
-    await staff('func', 'func')
+    funcionario()
     await expect(api.get('/painel/horarios', { as: 'staff' })).rejects.toMatchObject({ status: 403 })
   })
 })
@@ -265,7 +288,7 @@ describe('notificacoes', () => {
     expect(adm.find((n) => n.tipo === 'avaliacao').acoes.map((a) => a.id)).toEqual(['avaliacao'])
     expect(adm.find((n) => n.tipo === 'lembrete').acoes.map((a) => a.id)).toEqual(['aviso'])
     expect(adm.find((n) => n.id === 'n1').detalhes).toMatchObject({ cliente: 'Marcos Silva' })
-    await staff('func', 'func')
+    funcionario()
     const fun = await api.get('/notificacoes', { as: 'staff' })
     expect(fun.map((n) => n.id).sort()).toEqual(['n4', 'n5'])
     expect(fun.every((n) => n.acoes.length === 0)).toBe(true) // funcionario apenas le
@@ -293,11 +316,11 @@ describe('notificacoes', () => {
     expect((await api.get('/notificacoes', { as: 'staff' })).find((n) => n.id === 'n3').acoes[0].usada).toBe(true)
   })
   it('funcionario nao dispara acoes', async () => {
-    await staff('func', 'func')
+    funcionario()
     await expect(api.post('/notificacoes/n4/acao', { acao: 'aviso', mensagem: 'x', profissionalIds: ['p2'] }, { as: 'staff' })).rejects.toMatchObject({ status: 403 })
   })
   it('alerta do funcionario vira notificacao para o responsavel', async () => {
-    await staff('func', 'func')
+    funcionario()
     await api.post('/agenda/alertas', { agendamentoId: 'a1', motivo: 'Cliente agressivo', descricao: '' }, { as: 'staff' })
     await staff()
     const alerta = (await api.get('/notificacoes', { as: 'staff' })).find((n) => n.tipo === 'alerta')
@@ -315,7 +338,7 @@ describe('capa do portal e atalho de teste', () => {
     expect((await api.get('/saloes/barbearia-do-rafael')).capa).toBeNull()
   })
   it('atalho de teste liga a permissao que o admin ve em Configuracoes', async () => {
-    await staff('func', 'func')
+    funcionario()
     await api.put('/teste/edicao-horarios', { permitido: false }, { as: 'staff' })
     expect((await api.get('/agenda', { as: 'staff' })).podeEditar).toBe(false)
     await api.put('/teste/edicao-horarios', { permitido: true }, { as: 'staff' })
@@ -362,22 +385,13 @@ describe('profissional que nao atende clientes', () => {
     expect(r.ok).toBe(false)
     expect(r.problemas.join(' ')).toMatch(/atenda clientes/)
   })
-  it('quem se cadastra como salao com equipe comeca sem atender; autonomo atende', async () => {
-    const base = { razaoSocial: 'Casa', documento: '12345678901', senha: '12345678' }
-    await api.post('/auth/cadastro', { ...base, nome: 'Ana Dona', email: 'ana@x.com', atuacao: 'equipe' })
-    window.localStorage.setItem('cl:staff', JSON.stringify(await api.post('/auth/login', { email: 'ana@x.com', senha: '12345678' })))
-    expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais[0]).toMatchObject({ ehAdmin: true, atende: false })
-    await api.post('/auth/cadastro', { ...base, razaoSocial: 'Solo', nome: 'Beto Solo', email: 'beto@x.com', atuacao: 'autonomo' })
-    window.localStorage.setItem('cl:staff', JSON.stringify(await api.post('/auth/login', { email: 'beto@x.com', senha: '12345678' })))
-    expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais[0]).toMatchObject({ ehAdmin: true, atende: true })
-  })
 })
 
 describe('notificacoes geradas pelos eventos', () => {
   it('novo agendamento avisa o administrador e o profissional envolvido', async () => {
     await staff()
     const antesAdm = (await api.get('/notificacoes', { as: 'staff' })).length
-    await staff('func', 'func')
+    funcionario()
     const antesFun = (await api.get('/notificacoes', { as: 'staff' })).length
     const { data, hora } = await primeiroHorarioLivre('p1', 30)
     await api.post('/saloes/barbearia-do-rafael/agendamentos', { itens: [{ servicoId: 'sv2', profissionalId: 'p1' }], data, hora, clienteNome: 'Joana Teste', clienteWhats: '(62) 98888-7777' })
@@ -406,7 +420,7 @@ describe('notificacoes geradas pelos eventos', () => {
     const adm = (await api.get('/notificacoes', { as: 'staff' }))[0]
     expect(adm).toMatchObject({ tipo: 'cancelamento', lida: false })
     expect(adm.texto).toMatch(/Camila Rocha cancelou Corte de cabelo/)
-    await staff('func', 'func')
+    funcionario()
     expect((await api.get('/notificacoes', { as: 'staff' }))[0].tipo).toBe('cancelamento')
   })
 })

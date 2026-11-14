@@ -4,7 +4,7 @@ import { store } from '../lib/storage'
 
 const AuthCtx = createContext(null)
 
-/** Sessao do responsavel / funcionario. */
+/** Sessao do dono da barbearia (papel DONO no backend). */
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(() => store.get(STORAGE_KEYS.staff))
 
@@ -24,6 +24,8 @@ export function AuthProvider({ children }) {
     usuario: session?.usuario || null,
     async login(dados) {
       const s = await api.post('/auth/login', dados)
+      // o login e o mesmo para dono e cliente; esta tela e so do painel
+      if (s.usuario.papel !== 'DONO') throw new Error('Esta conta é de cliente. Para agendar, use "Sou cliente, quero agendar um horário".')
       persist(s)
       return s.usuario
     },
@@ -32,10 +34,18 @@ export function AuthProvider({ children }) {
       persist(s)
       return s.usuario
     },
-    logout: () => persist(null),
+    /** Encerra a sessao no backend (RF05) e limpa a do navegador, mesmo se o servidor nao responder. */
+    async logout() {
+      try {
+        await api.post('/auth/logout', undefined, { as: 'staff' })
+      } catch {
+        /* sessao ja encerrada ou servidor fora do ar: sai do mesmo jeito */
+      }
+      persist(null)
+    },
     /** So para a barra de prototipo (modo simulado): entra direto como um dos perfis de teste. */
     demoLogin: (papel) => persist(papel === 'administrador'
-      ? { token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel, salaoId: 's1', profissionalId: 'p1' } }
+      ? { token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }
       : { token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel, salaoId: 's1', profissionalId: 'p1' } }),
   }), [session, persist])
 
@@ -44,4 +54,5 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthCtx)
 
-export const homeDoPapel = (usuario) => (usuario?.papel === 'administrador' ? '/painel' : '/agenda')
+/** O dono vai para o painel. A agenda do funcionario so existe na barra do prototipo. */
+export const homeDoPapel = (usuario) => (usuario?.papel === 'DONO' ? '/painel' : '/agenda')

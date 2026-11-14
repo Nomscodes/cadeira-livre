@@ -22,24 +22,25 @@ const estado = () => screen.getByTestId('estado').textContent
 beforeEach(() => { window.matchMedia = undefined })
 
 describe('barra de prototipo', () => {
-  it('lista todas as 17 telas do mockup', () => {
+  it('lista todas as 16 telas do mockup', () => {
     montar()
     const nav = screen.getByRole('navigation', { name: 'Navegação do protótipo' })
-    expect(nav.querySelectorAll('button:not(.reset)')).toHaveLength(17)
+    expect(nav.querySelectorAll('button:not(.reset)')).toHaveLength(16)
   })
   it('abre cada tela ja com o perfil certo', async () => {
     const user = userEvent.setup()
     montar()
     await user.click(screen.getByRole('button', { name: 'Meu portal' }))
-    expect(estado()).toBe('/painel|administrador|-')
+    expect(estado()).toBe('/painel|DONO|-')
     await user.click(screen.getByRole('button', { name: 'Minha agenda' }))
     expect(estado()).toBe('/agenda|funcionario|-')
     await user.click(screen.getByRole('button', { name: 'Histórico' }))
     expect(estado()).toBe('/meus-agendamentos|funcionario|cliente')
+    // sair chama o logout da API antes de limpar a sessao, por isso espera
     await user.click(screen.getByRole('button', { name: 'Login/Cadastro' }))
-    expect(estado()).toBe('/login|-|cliente')
-    await user.click(screen.getByRole('button', { name: 'Acesso temporário' }))
-    expect(estado()).toBe('/acesso|-|-')
+    await waitFor(() => expect(estado()).toBe('/login|-|cliente'))
+    await user.click(screen.getByRole('button', { name: 'Área do cliente' }))
+    await waitFor(() => expect(estado()).toBe('/acesso|-|-'))
     await user.click(screen.getByRole('button', { name: 'Portal oculto' }))
     expect(estado()).toBe('/espaco-aurora|-|-')
   })

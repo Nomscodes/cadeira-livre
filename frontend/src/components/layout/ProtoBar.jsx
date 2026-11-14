@@ -11,7 +11,6 @@ import { useCliente } from '../../context/ClienteContext'
 const SALAO = '/barbearia-do-rafael'
 const TELAS = {
   login: { to: '/login', sair: 'staff' },
-  recuperar: { to: '/recuperar-senha', sair: 'staff' },
   painel: { to: '/painel', staff: 'administrador' },
   agendamentos: { to: '/painel/agendamentos', staff: 'administrador' },
   servicos: { to: '/painel/servicos', staff: 'administrador' },
@@ -29,9 +28,9 @@ const TELAS = {
   inexistente: { to: '/nao-existe-mesmo' },
 }
 const GRUPOS = [
-  { rotulo: 'RESPONSÁVEL:', itens: [['Login/Cadastro', 'login'], ['Recuperar senha', 'recuperar'], ['Meu portal', 'painel'], ['Agendamentos', 'agendamentos'], ['Serviços', 'servicos'], ['Funcionários', 'funcionarios'], ['Configuração', 'config']] },
+  { rotulo: 'RESPONSÁVEL:', itens: [['Login/Cadastro', 'login'], ['Meu portal', 'painel'], ['Agendamentos', 'agendamentos'], ['Serviços', 'servicos'], ['Funcionários', 'funcionarios'], ['Configuração', 'config']] },
   { rotulo: 'FUNCIONÁRIO:', itens: [['Minha agenda', 'agenda']] },
-  { rotulo: 'CLIENTE:', itens: [['Acesso temporário', 'token'], ['Buscar salão', 'buscar'], ['Portal público', 'portal'], ['Saiba mais', 'saiba'], ['Agendamento', 'agendar'], ['Histórico', 'historico'], ['Avaliação', 'avaliacao']] },
+  { rotulo: 'CLIENTE:', itens: [['Área do cliente', 'token'], ['Buscar salão', 'buscar'], ['Portal público', 'portal'], ['Saiba mais', 'saiba'], ['Agendamento', 'agendar'], ['Histórico', 'historico'], ['Avaliação', 'avaliacao']] },
   { rotulo: 'FALLBACK:', itens: [['Portal oculto', 'oculto'], ['Portal inexistente', 'inexistente']] },
 ]
 

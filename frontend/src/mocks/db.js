@@ -1,7 +1,7 @@
 import { store } from '../lib/storage'
 import { addDaysISO, todayISO, weekdayOf } from '../lib/dates'
 
-const KEY = 'cl:mockdb:v2' // v2: horarios por dia da semana, folgas, capa e notificacoes tipadas
+const KEY = 'cl:mockdb:v3' // v3: contas de cliente com e-mail e senha (igual ao backend)
 
 /** Proximo dia util (seg-sex) a partir de `n` dias de hoje, para o seed sempre cair em dia de trabalho. */
 function diaUtil(n) {
@@ -23,6 +23,10 @@ function seed() {
     usuarios: [
       { id: 'u-admin', nome: 'Rafael Lima', email: 'admin@teste.com', apelidos: ['admin'], senha: 'admin', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' },
       { id: 'u-func', nome: 'Rafael Lima', email: 'func@teste.com', apelidos: ['func'], senha: 'func', papel: 'funcionario', salaoId: 's1', profissionalId: 'p1' },
+    ],
+    // clientes com conta (cadastro com e-mail e senha). O telefone liga a conta aos agendamentos de exemplo.
+    clientes: [
+      { id: 'c1', nome: 'Gabriel Naoki', email: 'cliente@teste.com', telefone: '62955550000', senha: '12345678' },
     ],
     saloes: [
       {
