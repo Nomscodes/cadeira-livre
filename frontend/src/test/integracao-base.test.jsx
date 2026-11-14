@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import StatusChip from '../components/ui/StatusChip'
 import { hhmm } from '../lib/dates'
-import { STATUS } from '../lib/status'
+import { STATUS, grupoDoStatus } from '../lib/status'
 
 /** Resposta falsa do backend, no formato que o fetch devolve. */
 const resposta = (status, corpo) => ({
@@ -132,5 +132,45 @@ describe('formatos do backend', () => {
     expect(screen.getByText('cancelado')).toHaveClass('bad')
     rerender(<StatusChip status={STATUS.CONCLUIDO} />)
     expect(screen.getByText('concluído')).toHaveClass('ok')
+  })
+})
+
+describe('meus agendamentos com os status do backend', () => {
+  it('agrupa os status da V7 (e os da API simulada) para a tela do cliente', () => {
+    expect(grupoDoStatus('PENDENTE')).toBe('confirmado')
+    expect(grupoDoStatus('APROVADO')).toBe('confirmado')
+    expect(grupoDoStatus('CONCLUIDO')).toBe('finalizado')
+    expect(grupoDoStatus('CANCELADO')).toBe('cancelado')
+    expect(grupoDoStatus('RECUSADO')).toBe('cancelado')
+    expect(grupoDoStatus('finalizado')).toBe('finalizado') // nome da API simulada continua valendo
+  })
+
+  it('mostra pendente, recusado e concluido, com cancelar e avaliar nos lugares certos', async () => {
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'token-do-gabriel', usuario: { nome: 'Gabriel Naoki' } }))
+    const salao = { nome: 'Barbearia Naoki', slug: 'barbearia-naoki', temaId: 'verde-escuro', whatsapp: '62999990000' }
+    const base = { profissionais: 'Naoki', valor: 40, avaliado: false, salao, cancelamentoHoras: 4 }
+    const fetchFalso = vi.fn(async () => resposta(200, [
+      { ...base, id: 'a1', status: 'PENDENTE', servicos: 'Corte', data: '2026-11-18', hora: '14:00', podeCancelar: true },
+      { ...base, id: 'a2', status: 'RECUSADO', servicos: 'Barba', data: '2026-11-09', hora: '11:00', podeCancelar: false },
+      { ...base, id: 'a3', status: 'CONCLUIDO', servicos: 'Corte + Barba', data: '2026-11-06', hora: '14:00', podeCancelar: false },
+    ]))
+    await apiReal(fetchFalso)
+    // a tela e os providers são carregados depois do http.js apontar para o backend real
+    const { MemoryRouter } = await import('react-router-dom')
+    const { ToastProvider } = await import('../context/ToastContext')
+    const { default: HistoricoPage } = await import('../features/cliente/HistoricoPage')
+
+    render(<MemoryRouter><ToastProvider><HistoricoPage /></ToastProvider></MemoryRouter>)
+
+    const corte = (await screen.findByRole('heading', { name: 'Corte' })).closest('article')
+    expect(within(corte).getByText('pendente')).toBeInTheDocument()
+    expect(within(corte).getByRole('button', { name: 'cancelar' })).toBeInTheDocument()
+    const barba = screen.getByRole('heading', { name: 'Barba' }).closest('article')
+    expect(within(barba).getByText('recusado')).toBeInTheDocument()
+    expect(within(barba).queryByRole('button', { name: 'cancelar' })).not.toBeInTheDocument()
+    const concluido = screen.getByRole('heading', { name: 'Corte + Barba' }).closest('article')
+    expect(within(concluido).getByText('concluído')).toBeInTheDocument()
+    expect(within(concluido).getByRole('link', { name: 'avaliar' })).toHaveAttribute('href', '/avaliar/a3')
+    expect(fetchFalso.mock.calls[0][0]).toBe('http://localhost:8080/api/cliente/agendamentos')
   })
 })
