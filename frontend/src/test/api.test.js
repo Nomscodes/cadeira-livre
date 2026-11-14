@@ -391,6 +391,24 @@ describe('profissional que nao atende clientes', () => {
     expect(r.ok).toBe(false)
     expect(r.problemas.join(' ')).toMatch(/atenda clientes/)
   })
+  it('quem se cadastra como salao com equipe comeca sem atender; autonomo atende', async () => {
+    const base = { nome: 'Gabriel Naoki', razaoSocial: 'Barbearia Naoki', documento: '12345678901', senha: '12345678', aceitouTermos: true }
+    await api.post('/auth/cadastro', { ...base, email: 'naoki.equipe@teste.com', atuacao: 'equipe' })
+    await staff('naoki.equipe@teste.com', '12345678')
+    expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais).toEqual([
+      expect.objectContaining({ nome: 'Gabriel Naoki', nomeSocial: 'Gabriel', ehAdmin: true, atende: false }),
+    ])
+    await api.post('/auth/cadastro', { ...base, razaoSocial: 'Naoki Solo', email: 'naoki.autonomo@teste.com', atuacao: 'autonomo' })
+    await staff('naoki.autonomo@teste.com', '12345678')
+    expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais).toEqual([
+      expect.objectContaining({ nome: 'Gabriel Naoki', ehAdmin: true, atende: true }),
+    ])
+  })
+  it('sem a atuacao no cadastro, o dono e tratado como autonomo e atende', async () => {
+    await api.post('/auth/cadastro', { nome: 'Gabriel Naoki', razaoSocial: 'Barbearia Sem Atuacao', documento: '12345678901', email: 'naoki.sem@teste.com', senha: '12345678', aceitouTermos: true })
+    await staff('naoki.sem@teste.com', '12345678')
+    expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais[0]).toMatchObject({ ehAdmin: true, atende: true })
+  })
 })
 
 describe('notificacoes geradas pelos eventos', () => {
