@@ -7,6 +7,7 @@ import java.util.UUID;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.common.cripto.CriptografiaConverter;
 import br.com.cadeiralivre.api.servico.Servico;
+import br.com.cadeiralivre.api.usuario.Usuario;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
@@ -18,12 +19,16 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-/** Barbeiro que atende na barbearia. Cada um tem a lista dos serviços que sabe fazer. */
+/**
+ * Profissional da barbearia. Cada um tem a lista dos serviços que sabe fazer.
+ * O dono também é um profissional (administrador); se ele só gerencia o salão, fica com atende = false.
+ */
 @Entity
 @Table(name = "profissional")
 @Getter
@@ -49,6 +54,26 @@ public class Profissional {
 
     @Column(nullable = false)
     private boolean ativo = true;
+
+    // conta que entra no sistema como este profissional (o dono ou um funcionário); null = sem login
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "usuario_id", unique = true)
+    private Usuario usuario;
+
+    // nome mostrado aos clientes no portal
+    @Column(name = "nome_social", length = 60)
+    private String nomeSocial;
+
+    // false = não atende clientes: não aparece no portal nem na disponibilidade
+    @Column(nullable = false)
+    private boolean atende = true;
+
+    @Column(nullable = false)
+    private boolean administrador = false;
+
+    // os avisos de agendamento vão também para o WhatsApp dele
+    @Column(nullable = false)
+    private boolean encaminhar = false;
 
     @ManyToMany
     @JoinTable(name = "profissional_servico",
