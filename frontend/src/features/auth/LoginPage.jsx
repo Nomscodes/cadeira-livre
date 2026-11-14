@@ -6,7 +6,7 @@ import { USE_MOCK } from '../../lib/http'
 import { homeDoPapel, useAuth } from '../../context/AuthContext'
 import AuthShell from '../../components/layout/AuthShell'
 import Button from '../../components/ui/Button'
-import { Field, PasswordInput } from '../../components/ui/Field'
+import { Field, FieldGroup, PasswordInput } from '../../components/ui/Field'
 
 function LoginForm() {
   const { login } = useAuth()
@@ -41,7 +41,7 @@ function LoginForm() {
       </Field>
       {erro && <div className="box warn" role="alert">{erro}</div>}
       <Button type="submit" block loading={busy} style={{ marginTop: 14 }}>Entrar</Button>
-      {USE_MOCK && <p className="hint" style={{ marginTop: 10 }}>fase de testes: admin/admin (dono da barbearia)</p>}
+      {USE_MOCK && <p className="hint" style={{ marginTop: 10 }}>fase de testes: admin/admin (administrador) &middot; func/func (funcionário). O sistema reconhece o cargo pelo login.</p>}
       <hr className="divider" />
       <Link to="/acesso" className="btn ghost block">Sou cliente, quero agendar um horário</Link>
     </form>
@@ -51,7 +51,7 @@ function LoginForm() {
 function CadastroForm({ onLogin }) {
   const { cadastrar } = useAuth()
   const navigate = useNavigate()
-  const [v, setV] = useState({ nome: '', razaoSocial: '', documento: '', email: '', senha: '', confirma: '', termos: false })
+  const [v, setV] = useState({ nome: '', razaoSocial: '', documento: '', email: '', atuacao: 'autonomo', senha: '', confirma: '', termos: false })
   const [erros, setErros] = useState({})
   const [erroGeral, setErroGeral] = useState('')
   const [busy, setBusy] = useState(false)
@@ -80,8 +80,9 @@ function CadastroForm({ onLogin }) {
     setErroGeral('')
     setBusy(true)
     try {
-      // mesmo formato do CadastroDonoRequest do backend; o aceite dos termos e gravado com data e hora (RNF02)
-      await cadastrar({ nome: v.nome.trim(), razaoSocial: v.razaoSocial.trim(), documento: digits(v.documento), email: v.email.trim(), senha: v.senha, aceitouTermos: v.termos })
+      // atuacao: 'autonomo' (o dono tambem atende) ou 'equipe' (o dono so gerencia)
+      // o aceite dos termos e gravado com data e hora (RNF02)
+      await cadastrar({ nome: v.nome.trim(), razaoSocial: v.razaoSocial.trim(), documento: digits(v.documento), email: v.email.trim(), atuacao: v.atuacao, senha: v.senha, aceitouTermos: v.termos })
       navigate('/painel', { replace: true })
     } catch (err) {
       setErroGeral(err.message)
@@ -96,6 +97,12 @@ function CadastroForm({ onLogin }) {
       <Field label="razão social" error={erros.razaoSocial} required><input type="text" autoComplete="organization" value={v.razaoSocial} onChange={set('razaoSocial')} /></Field>
       <Field label="CNPJ ou CPF" error={erros.documento} required><input type="text" inputMode="numeric" value={v.documento} onChange={set('documento')} /></Field>
       <Field label="e-mail" error={erros.email} required><input type="text" inputMode="email" autoComplete="email" value={v.email} onChange={set('email')} /></Field>
+      <FieldGroup label="como você atua">
+        <div className="radio-row">
+          <label><input type="radio" name="atuacao" checked={v.atuacao === 'autonomo'} onChange={() => setV((s) => ({ ...s, atuacao: 'autonomo' }))} /> Profissional autônomo</label>
+          <label><input type="radio" name="atuacao" checked={v.atuacao === 'equipe'} onChange={() => setV((s) => ({ ...s, atuacao: 'equipe' }))} /> Salão com equipe</label>
+        </div>
+      </FieldGroup>
       <Field label="senha" error={erros.senha} hint="Mínimo de 8 caracteres." required><PasswordInput autoComplete="new-password" value={v.senha} onChange={set('senha')} /></Field>
       <Field label="confirmação de senha" error={erros.confirma} required><PasswordInput autoComplete="new-password" value={v.confirma} onChange={set('confirma')} /></Field>
       <label className="check-row"><input type="checkbox" checked={v.termos} onChange={set('termos')} aria-invalid={erros.termos ? true : undefined} /> li e aceito os termos de uso e a política de privacidade</label>

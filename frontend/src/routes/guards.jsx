@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import { homeDoPapel, useAuth } from '../context/AuthContext'
 import { useCliente } from '../context/ClienteContext'
 
-/** Exige login do dono (ou do funcionario do prototipo). Com `role`, redireciona quem tem outro papel para a propria home. */
+/** Exige login da equipe (dono ou funcionario). Com `role`, redireciona quem tem outro papel para a propria home. */
 export function RequireStaff({ role }) {
   const { usuario } = useAuth()
   if (!usuario) return <Navigate to="/login" replace />
