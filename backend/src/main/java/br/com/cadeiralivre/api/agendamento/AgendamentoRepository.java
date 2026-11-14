@@ -40,6 +40,10 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
     // agendamentos da barbearia em um dia e status (a disponibilidade usa os APROVADOS)
     List<Agendamento> findAllByBarbeariaIdAndDataAndStatus(UUID barbeariaId, LocalDate data, StatusAgendamento status);
 
+    // agendamentos de um período e status (o calendário do cliente calcula o mês inteiro de uma vez)
+    List<Agendamento> findAllByBarbeariaIdAndDataBetweenAndStatus(UUID barbeariaId, LocalDate inicio, LocalDate fim,
+                                                                StatusAgendamento status);
+
     /** RF21: o profissional já tem agendamento no status dado que sobreponha o intervalo [inicio, fim)? */
     @Query("""
             select count(a) > 0 from Agendamento a

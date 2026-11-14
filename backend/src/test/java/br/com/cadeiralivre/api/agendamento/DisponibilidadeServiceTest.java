@@ -4,13 +4,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.DayOfWeek;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +27,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import br.com.cadeiralivre.api.agendamento.dto.CalendarioResponse;
 import br.com.cadeiralivre.api.agendamento.dto.DisponibilidadeResponse;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
@@ -31,6 +37,8 @@ import br.com.cadeiralivre.api.horario.BloqueioHorarioRepository;
 import br.com.cadeiralivre.api.horario.HorarioFuncionamento;
 import br.com.cadeiralivre.api.horario.HorarioFuncionamentoRepository;
 import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorario;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorarioRepository;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
@@ -56,6 +64,9 @@ class DisponibilidadeServiceTest {
     @Mock
     private AgendamentoRepository agendamentoRepository;
 
+    @Mock
+    private ProfissionalHorarioRepository profissionalHorarioRepository;
+
     private DisponibilidadeService disponibilidadeService;
 
     // "Agora" fixo nos testes: terça, 10/11/2026 às 09:00 no horário de Brasília
@@ -73,7 +84,8 @@ class DisponibilidadeServiceTest {
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
         disponibilidadeService = new DisponibilidadeService(barbeariaRepository, servicoRepository,
-                profissionalRepository, horarioRepository, bloqueioRepository, agendamentoRepository, relogio);
+                profissionalRepository, profissionalHorarioRepository, horarioRepository, bloqueioRepository,
+                agendamentoRepository, relogio);
 
         barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
@@ -259,6 +271,143 @@ class DisponibilidadeServiceTest {
         b.setHoraInicio(inicio == null ? null : LocalTime.parse(inicio));
         b.setHoraFim(fim == null ? null : LocalTime.parse(fim));
         return b;
+    }
+
+    // ---------- calendário do front: vários profissionais e a duração somada ----------
+
+    @Test
+    void horariosDoDiaUsamAJanelaEmComumEPulamOAlmoco() {
+        Profissional gabriel = profissional("Gabriel Naoki");
+        calendario(List.of(gabriel, diego), List.of(
+                trabalha(gabriel, DayOfWeek.WEDNESDAY, "09:00", "18:00"), trabalha(diego, DayOfWeek.WEDNESDAY, "10:00", "15:00")),
+                List.of(), List.of());
+
+        List<CalendarioResponse.Horario> horarios = disponibilidadeService.horariosDoDia("barbearia-teste",
+                List.of(gabriel.getId(), diego.getId()), amanha, 30);
+
+        List<String> horas = horarios.stream().map(CalendarioResponse.Horario::hora).toList();
+        assertEquals("10:00", horas.get(0)); // o Diego só começa às 10h
+        assertEquals("14:30", horas.get(horas.size() - 1)); // e sai às 15h
+        assertFalse(horas.contains("12:00")); // ninguém começa no almoço
+        assertFalse(horas.contains("12:30"));
+        assertTrue(horarios.stream().allMatch(CalendarioResponse.Horario::livre));
+    }
+
+    @Test
+    void servicoQueEntraNoAlmocoFicaOcupado() {
+        Profissional gabriel = profissional("Gabriel Naoki");
+        calendario(List.of(gabriel), List.of(trabalha(gabriel, DayOfWeek.WEDNESDAY, "09:00", "18:00")), List.of(), List.of());
+
+        List<CalendarioResponse.Horario> horarios = disponibilidadeService.horariosDoDia("barbearia-teste",
+                List.of(gabriel.getId()), amanha, 60);
+
+        assertFalse(livre(horarios, "11:30")); // 11:30 + 60 min passaria pelo almoço
+        assertTrue(livre(horarios, "11:00"));
+    }
+
+    @Test
+    void agendamentoAprovadoDeUmDosProfissionaisOcupaOHorarioDoGrupo() {
+        Profissional gabriel = profissional("Gabriel Naoki");
+        Agendamento aprovado = new Agendamento();
+        aprovado.setData(amanha);
+        aprovado.setHoraInicio(LocalTime.of(10, 0));
+        aprovado.setHoraFim(LocalTime.of(10, 30));
+        aprovado.adicionarItem(AgendamentoItem.doServico(corte, diego, 0));
+        calendario(List.of(gabriel, diego), List.of(trabalha(gabriel, DayOfWeek.WEDNESDAY, "09:00", "18:00"),
+                trabalha(diego, DayOfWeek.WEDNESDAY, "09:00", "18:00")), List.of(), List.of(aprovado));
+
+        assertFalse(livre(disponibilidadeService.horariosDoDia("barbearia-teste",
+                List.of(gabriel.getId(), diego.getId()), amanha, 30), "10:00"));
+        assertTrue(livre(disponibilidadeService.horariosDoDia("barbearia-teste",
+                List.of(gabriel.getId()), amanha, 30), "10:00")); // sem o Diego, o horário está livre
+    }
+
+    @Test
+    void hojeSoValeDepoisDeAgoraMaisMeiaHora() {
+        Profissional gabriel = profissional("Gabriel Naoki");
+        calendario(List.of(gabriel), List.of(trabalha(gabriel, DayOfWeek.TUESDAY, "09:00", "18:00")), List.of(), List.of());
+
+        // agora são 09:00 de terça (10/11)
+        List<CalendarioResponse.Horario> horarios = disponibilidadeService.horariosDoDia("barbearia-teste",
+                List.of(gabriel.getId()), hoje, 30);
+
+        assertFalse(livre(horarios, "09:00"));
+        assertFalse(livre(horarios, "09:30"));
+        assertTrue(livre(horarios, "10:00"));
+    }
+
+    @Test
+    void diasDoMesMostramPassadoBloqueadoFechadoFolgaEOk() {
+        Profissional gabriel = profissional("Gabriel Naoki");
+        List<ProfissionalHorario> semana = new ArrayList<>();
+        for (DayOfWeek dia : List.of(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)) {
+            semana.add(trabalha(gabriel, dia, "09:00", "18:00"));
+        }
+        BloqueioHorario feriado = new BloqueioHorario();
+        feriado.setData(LocalDate.of(2026, 11, 20));
+        feriado.setMotivo("Consciência Negra");
+        BloqueioHorario folga = new BloqueioHorario();
+        folga.setData(LocalDate.of(2026, 11, 18));
+        folga.setProfissional(gabriel);
+        calendario(List.of(gabriel), semana, List.of(feriado, folga), List.of());
+
+        List<CalendarioResponse.Dia> dias = disponibilidadeService.diasDoMes("barbearia-teste",
+                List.of(gabriel.getId()), YearMonth.of(2026, 11), 30);
+
+        assertEquals(30, dias.size());
+        assertEquals("passado", dias.get(8).estado());   // 09/11
+        assertEquals("ok", dias.get(10).estado());       // 11/11, quarta
+        assertEquals("fechado", dias.get(13).estado());  // 14/11, sábado
+        assertEquals("folga", dias.get(17).estado());    // 18/11, folga do Gabriel
+        assertEquals("bloqueado", dias.get(19).estado()); // 20/11
+        assertEquals("Consciência Negra", dias.get(19).motivo());
+    }
+
+    @Test
+    void profissionalQueNaoEhDoSalaoDevolve422() {
+        calendario(List.of(rafael), List.of(), List.of(), List.of());
+
+        ApiException erro = assertThrows(ApiException.class, () -> disponibilidadeService.horariosDoDia(
+                "barbearia-teste", List.of(UUID.randomUUID()), amanha, 30));
+
+        assertEquals(422, erro.getStatus().value());
+    }
+
+    @Test
+    void estaLivreUsaAMesmaRegraDoCalendario() {
+        Profissional gabriel = profissional("Gabriel Naoki");
+        calendario(List.of(gabriel), List.of(trabalha(gabriel, DayOfWeek.WEDNESDAY, "09:00", "18:00")), List.of(), List.of());
+
+        assertTrue(disponibilidadeService.estaLivre(barbearia, List.of(gabriel), amanha, LocalTime.of(9, 0), 30));
+        assertFalse(disponibilidadeService.estaLivre(barbearia, List.of(gabriel), amanha, LocalTime.of(12, 0), 30));
+    }
+
+    // salão aberto de segunda a sexta, das 9h às 18h, com estes profissionais, horários, bloqueios e aprovados
+    private void calendario(List<Profissional> profissionais, List<ProfissionalHorario> horarios,
+                            List<BloqueioHorario> bloqueios, List<Agendamento> aprovados) {
+        lenient().when(barbeariaRepository.findBySlug("barbearia-teste")).thenReturn(Optional.of(barbearia));
+        profissionais.forEach(p -> p.setBarbearia(barbearia));
+        lenient().when(profissionalRepository.findAllByBarbeariaIdOrderByNome(barbearia.getId())).thenReturn(profissionais);
+        List<HorarioFuncionamento> salao = new ArrayList<>();
+        for (DayOfWeek dia : List.of(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)) {
+            HorarioFuncionamento h = new HorarioFuncionamento();
+            h.setDiaSemana(dia);
+            h.setHoraAbertura(LocalTime.of(9, 0));
+            h.setHoraFechamento(LocalTime.of(18, 0));
+            salao.add(h);
+        }
+        lenient().when(horarioRepository.findAllByBarbeariaId(barbearia.getId())).thenReturn(salao);
+        lenient().when(profissionalHorarioRepository.findAllByProfissionalBarbeariaId(barbearia.getId())).thenReturn(horarios);
+        lenient().when(bloqueioRepository.findAllByBarbeariaIdAndDataBetweenOrderByData(any(), any(), any())).thenReturn(bloqueios);
+        lenient().when(agendamentoRepository.findAllByBarbeariaIdAndDataBetweenAndStatus(any(), any(), any(), any())).thenReturn(aprovados);
+    }
+
+    private ProfissionalHorario trabalha(Profissional p, DayOfWeek dia, String inicio, String fim) {
+        return new ProfissionalHorario(p, dia, LocalTime.parse(inicio), LocalTime.parse(fim), true);
+    }
+
+    private boolean livre(List<CalendarioResponse.Horario> horarios, String hora) {
+        return horarios.stream().anyMatch(h -> h.hora().equals(hora) && h.livre());
     }
 
     private Profissional profissional(String nome) {
