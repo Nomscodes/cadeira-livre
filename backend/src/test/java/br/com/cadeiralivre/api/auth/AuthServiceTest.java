@@ -2,6 +2,7 @@ package br.com.cadeiralivre.api.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -137,7 +138,7 @@ class AuthServiceTest {
         when(jwtService.gerar(any(), eq(Papel.DONO), eq(barbearia.getId()), eq(sessaoAberta.getId()))).thenReturn("token-falso");
 
         SessaoResponse sessao = authService.cadastrarDono(new CadastroDonoRequest(
-                "Dono Teste", "Barbearia Teste", "12345678901", "dono@teste.com", "12345678", true));
+                "Dono Teste", "Barbearia Teste", "12345678901", "dono@teste.com", "12345678", true, null));
 
         assertEquals("DONO", sessao.usuario().papel());
         assertEquals(barbearia.getId(), sessao.usuario().barbeariaId());
@@ -150,7 +151,7 @@ class AuthServiceTest {
         when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
 
         authService.cadastrarDono(new CadastroDonoRequest(
-                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true));
+                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true, null)); // sem atuação: vale autonomo
 
         ArgumentCaptor<Usuario> dono = ArgumentCaptor.forClass(Usuario.class);
         verify(usuarioRepository).save(dono.capture());
@@ -168,13 +169,13 @@ class AuthServiceTest {
     @Test
     void donoDeSalaoComEquipeViraAdministradorQueNaoAtende() {
         Barbearia barbearia = new Barbearia();
-        barbearia.setAtuacao("equipe");
         when(barbeariaService.criar("Barbearia Naoki", "12345678901")).thenReturn(barbearia);
         when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
 
         authService.cadastrarDono(new CadastroDonoRequest(
-                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true));
+                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true, "equipe"));
 
+        assertEquals("equipe", barbearia.getAtuacao()); // a escolha fica guardada na barbearia
         ArgumentCaptor<Profissional> salvo = ArgumentCaptor.forClass(Profissional.class);
         verify(profissionalRepository).save(salvo.capture());
         assertTrue(salvo.getValue().isAdministrador());
@@ -183,11 +184,34 @@ class AuthServiceTest {
     }
 
     @Test
+    void loginDoDonoDevolveOProfissionalDaContaNaSessao() {
+        Barbearia barbearia = new Barbearia();
+        barbearia.setId(UUID.randomUUID());
+        DonoBarbearia dono = new DonoBarbearia();
+        dono.setId(UUID.randomUUID());
+        dono.setNome("Gabriel Naoki");
+        dono.setSenhaHash("hash-salvo");
+        dono.setBarbearia(barbearia);
+        Profissional profissional = new Profissional();
+        profissional.setId(UUID.randomUUID());
+        when(usuarioRepository.findByEmailHash(criptografia.hash("naoki@teste.com"))).thenReturn(Optional.of(dono));
+        when(passwordEncoder.matches("12345678", "hash-salvo")).thenReturn(true);
+        when(profissionalRepository.findByUsuarioId(dono.getId())).thenReturn(Optional.of(profissional));
+        when(sessaoService.abrir(dono)).thenReturn(sessaoAberta);
+
+        SessaoResponse sessao = authService.login(new LoginRequest("naoki@teste.com", "12345678"));
+
+        assertEquals("DONO", sessao.usuario().papel());
+        assertEquals(barbearia.getId(), sessao.usuario().barbeariaId());
+        assertEquals(profissional.getId(), sessao.usuario().profissionalId());
+    }
+
+    @Test
     void cadastroDeDonoComEmailJaUsadoNaoCriaProfissional() {
         when(usuarioRepository.existsByEmailHash(criptografia.hash("naoki@teste.com"))).thenReturn(true);
 
         assertThrows(ApiException.class, () -> authService.cadastrarDono(new CadastroDonoRequest(
-                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true)));
+                "Gabriel Naoki", "Barbearia Naoki", "12345678901", "naoki@teste.com", "12345678", true, null)));
 
         verify(profissionalRepository, never()).save(any());
     }
@@ -214,6 +238,9 @@ class AuthServiceTest {
 
         // o token devolvido é o que leva o id da sessão aberta neste login
         assertEquals("token-falso", sessao.token());
+        // o cliente não tem profissional, e nem é feita a busca
+        assertNull(sessao.usuario().profissionalId());
+        verify(profissionalRepository, never()).findByUsuarioId(any());
     }
 
     @Test
