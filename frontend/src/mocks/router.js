@@ -58,6 +58,6 @@ export function requireAdmin(ctx) {
   return u
 }
 export function requireCliente(ctx) {
-  if (ctx.session?.tipo !== 'cliente') throw new ApiError(401, 'Confirme seu código de acesso para continuar.')
+  if (ctx.session?.tipo !== 'cliente') throw new ApiError(401, 'Faça login para continuar.')
   return ctx.session
 }
