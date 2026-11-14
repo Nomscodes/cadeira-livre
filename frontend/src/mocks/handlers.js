@@ -54,15 +54,21 @@ route('POST', '/auth/cadastro', ({ body }) => {
   let n = 2
   while (db().saloes.some((s) => s.slug === slug)) slug = `${base}-${n++}`
 
-  // igual ao backend: a barbearia nasce oculta e sem profissionais; o dono cadastra a equipe no painel
+  // a barbearia nasce oculta e o dono ja entra como profissional administrador dela
   const salaoId = nextId('s')
+  const profId = nextId('p')
   db().saloes.push({
     id: salaoId, slug, nome: body.razaoSocial || body.nome, cidade: '', categoria: 'barbearia',
     temaId: 'vermelho-escuro', publico: false, logo: null, galeria: [], sobre: '', whatsapp: '', endereco: '',
     redes: '', capa: null, horarios: semana([1, 2, 3, 4, 5], '09:00', '18:00'), atendimento: 'local', cancelamentoHoras: 4, funcionariosEditamHorario: false,
-    adminIds: [], documento: body.documento,
+    adminIds: [profId], documento: body.documento, atuacao: body.atuacao,
   })
-  const u = { id: nextId('u'), nome: body.nome, email, apelidos: [], senha: body.senha, papel: 'administrador', salaoId }
+  db().profissionais.push({
+    id: profId, salaoId, nome: body.nome, nomeSocial: body.nome.split(' ')[0], whatsapp: '', encaminhar: false,
+    atende: body.atuacao !== 'equipe', // quem tem equipe pode so gerenciar; o autonomo atende por definicao
+    servicoIds: [], horarios: semana([1, 2, 3, 4, 5], '09:00', '18:00'),
+  })
+  const u = { id: nextId('u'), nome: body.nome, email, apelidos: [], senha: body.senha, papel: 'administrador', salaoId, profissionalId: profId }
   db().usuarios.push(u)
   save()
   return sessaoEquipe(u)
