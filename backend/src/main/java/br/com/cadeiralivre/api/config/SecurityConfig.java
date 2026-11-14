@@ -47,6 +47,8 @@ public class SecurityConfig {
                         "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/painel/**").hasRole("DONO")
                 .requestMatchers("/cliente/**").hasRole("CLIENTE")
+                // sino do painel: do dono e, quando o login do funcionário chegar, da equipe
+                .requestMatchers("/notificacoes/**").hasAnyRole("DONO", "FUNCIONARIO")
                 .anyRequest().authenticated())
             .addFilterBefore(new JwtAuthenticationFilter(jwtService, sessaoService),
                     UsernamePasswordAuthenticationFilter.class);
