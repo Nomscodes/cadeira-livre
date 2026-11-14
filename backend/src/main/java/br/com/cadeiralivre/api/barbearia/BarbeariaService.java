@@ -155,6 +155,30 @@ public class BarbeariaService {
         return montarPortal(b);
     }
 
+    /** Configurações do salão: tipo de atendimento, prazo de cancelamento e se os funcionários editam o próprio horário. */
+    @Transactional
+    public void salvarConfiguracoes(String atendimento, int cancelamentoHoras, boolean funcionariosEditamHorario) {
+        Barbearia b = buscarDoTenant();
+        b.setAtendimento(atendimento);
+        b.setCancelamentoHoras(cancelamentoHoras);
+        b.setFuncionariosEditamHorario(funcionariosEditamHorario);
+        auditoriaService.registrar(AcaoAuditoria.PORTAL_ALTERADO, "Configurações: atendimento " + atendimento
+                + " | cancelamento até " + cancelamentoHoras + " h antes");
+    }
+
+    /** Passa o cargo de administrador para outro profissional do salão: ele vira o único administrador. */
+    @Transactional
+    public void transferirAdministrador(UUID profissionalId) {
+        Barbearia b = buscarDoTenant();
+        List<Profissional> profissionais = profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId());
+        Profissional novo = profissionais.stream()
+                .filter(p -> p.isAtivo() && p.getId().equals(profissionalId))
+                .findFirst()
+                .orElseThrow(() -> ApiException.naoEncontrado("Profissional não encontrado."));
+        profissionais.forEach(p -> p.setAdministrador(p == novo));
+        auditoriaService.registrar(AcaoAuditoria.PORTAL_ALTERADO, "Administrador transferido para " + novo.getNome());
+    }
+
     /**
      * Regra de publicação (RF09): o cliente precisa ter o que escolher. Devolve o que falta; lista vazia = pode publicar.
      * Só contam serviços ativos e profissionais ativos que atendem clientes.
