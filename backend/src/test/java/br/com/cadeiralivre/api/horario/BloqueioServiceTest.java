@@ -15,6 +15,8 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -197,5 +199,139 @@ class BloqueioServiceTest {
         ApiException erro = assertThrows(ApiException.class, () -> bloqueioService.listar());
 
         assertEquals(403, erro.getStatus().value());
+    }
+
+    // ---------- calendário do painel: dia inteiro por data ----------
+
+    @Test
+    void bloqueiosDoMesTrazSoODiaInteiroDoSalao() {
+        Profissional gabriel = profissionalDoGabriel();
+        BloqueioHorario feriadoDoSalao = diaInteiro(feriado, null, "Feriado");
+        BloqueioHorario folga = diaInteiro(feriado, gabriel, "Folga");
+        BloqueioHorario soDeTarde = diaInteiro(feriado, null, "Reforma");
+        soDeTarde.setHoraInicio(catorzeHoras);
+        soDeTarde.setHoraFim(dezesseisHoras);
+        when(bloqueioRepository.findAllByBarbeariaIdAndDataBetweenOrderByData(minhaBarbearia,
+                LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30))).thenReturn(List.of(feriadoDoSalao, folga, soDeTarde));
+
+        List<BloqueioResponse> doMes = bloqueioService.bloqueiosDoMes(YearMonth.of(2026, 11));
+
+        assertEquals(1, doMes.size());
+        assertEquals("Feriado", doMes.get(0).motivo());
+        assertEquals(feriado, doMes.get(0).data());
+    }
+
+    @Test
+    void folgasDoMesFiltramPeloProfissional() {
+        Profissional gabriel = profissionalDoGabriel();
+        Profissional diego = new Profissional();
+        diego.setId(UUID.randomUUID());
+        when(bloqueioRepository.findAllByBarbeariaIdAndDataBetweenOrderByData(minhaBarbearia,
+                LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30))).thenReturn(List.of(
+                diaInteiro(feriado, gabriel, "Folga"), diaInteiro(feriado, diego, "Médico"), diaInteiro(feriado, null, "Feriado")));
+
+        assertEquals(2, bloqueioService.folgasDoMes(YearMonth.of(2026, 11), null).size());
+        List<BloqueioResponse> doGabriel = bloqueioService.folgasDoMes(YearMonth.of(2026, 11), gabriel.getId());
+        assertEquals(1, doGabriel.size());
+        assertEquals(gabriel.getId(), doGabriel.get(0).profissionalId());
+    }
+
+    @Test
+    void fecharDiaCriaOBloqueioDoDiaInteiroComMotivoPadrao() {
+        when(barbeariaRepository.getReferenceById(minhaBarbearia)).thenReturn(barbearia);
+
+        bloqueioService.fecharDia(feriado, "  ");
+
+        ArgumentCaptor<BloqueioHorario> salvo = ArgumentCaptor.forClass(BloqueioHorario.class);
+        verify(bloqueioRepository).save(salvo.capture());
+        assertEquals(feriado, salvo.getValue().getData());
+        assertNull(salvo.getValue().getHoraInicio());
+        assertNull(salvo.getValue().getProfissional());
+        assertEquals("Sem motivo informado", salvo.getValue().getMotivo());
+    }
+
+    @Test
+    void fecharDiaQueJaEstaFechadoSoTrocaOMotivo() {
+        BloqueioHorario existente = diaInteiro(feriado, null, "Feriado");
+        when(bloqueioRepository.findAllByBarbeariaIdAndData(minhaBarbearia, feriado)).thenReturn(List.of(existente));
+
+        bloqueioService.fecharDia(feriado, "Consciência Negra");
+
+        verify(bloqueioRepository).save(existente);
+        assertEquals("Consciência Negra", existente.getMotivo());
+    }
+
+    @Test
+    void naoDaPraFecharUmDiaQueJaPassou() {
+        ApiException erro = assertThrows(ApiException.class, () -> bloqueioService.fecharDia(hoje.minusDays(1), null));
+
+        assertEquals(422, erro.getStatus().value());
+        verify(bloqueioRepository, never()).save(any());
+    }
+
+    @Test
+    void reabrirDiaApagaSoOBloqueioDoSalaoNaqueleDia() {
+        BloqueioHorario doSalao = diaInteiro(feriado, null, "Feriado");
+        BloqueioHorario folga = diaInteiro(feriado, profissionalDoGabriel(), "Folga");
+        when(bloqueioRepository.findAllByBarbeariaIdAndData(minhaBarbearia, feriado)).thenReturn(List.of(doSalao, folga));
+
+        bloqueioService.reabrirDia(feriado);
+
+        verify(bloqueioRepository).deleteAll(List.of(doSalao));
+    }
+
+    @Test
+    void darFolgaUsaMotivoFolgaEProfissionalDoSalao() {
+        Profissional gabriel = profissionalDoGabriel();
+        when(profissionalRepository.findByIdAndBarbeariaId(gabriel.getId(), minhaBarbearia)).thenReturn(Optional.of(gabriel));
+        when(barbeariaRepository.getReferenceById(minhaBarbearia)).thenReturn(barbearia);
+
+        bloqueioService.darFolga(gabriel.getId(), feriado, null);
+
+        ArgumentCaptor<BloqueioHorario> salvo = ArgumentCaptor.forClass(BloqueioHorario.class);
+        verify(bloqueioRepository).save(salvo.capture());
+        assertEquals(gabriel, salvo.getValue().getProfissional());
+        assertEquals("Folga", salvo.getValue().getMotivo());
+    }
+
+    @Test
+    void folgaDeProfissionalDeOutroSalaoDevolve404() {
+        UUID deOutroSalao = UUID.randomUUID();
+        when(profissionalRepository.findByIdAndBarbeariaId(deOutroSalao, minhaBarbearia)).thenReturn(Optional.empty());
+
+        ApiException erro = assertThrows(ApiException.class, () -> bloqueioService.darFolga(deOutroSalao, feriado, null));
+
+        assertEquals(404, erro.getStatus().value());
+        verify(bloqueioRepository, never()).save(any());
+    }
+
+    @Test
+    void tirarFolgaApagaSoAFolgaDaqueleProfissional() {
+        Profissional gabriel = profissionalDoGabriel();
+        BloqueioHorario folga = diaInteiro(feriado, gabriel, "Folga");
+        BloqueioHorario doSalao = diaInteiro(feriado, null, "Feriado");
+        when(profissionalRepository.findByIdAndBarbeariaId(gabriel.getId(), minhaBarbearia)).thenReturn(Optional.of(gabriel));
+        when(bloqueioRepository.findAllByBarbeariaIdAndData(minhaBarbearia, feriado)).thenReturn(List.of(folga, doSalao));
+
+        bloqueioService.tirarFolga(gabriel.getId(), feriado);
+
+        verify(bloqueioRepository).deleteAll(List.of(folga));
+    }
+
+    private Profissional profissionalDoGabriel() {
+        Profissional p = new Profissional();
+        p.setId(UUID.randomUUID());
+        p.setNome("Gabriel Naoki");
+        return p;
+    }
+
+    private BloqueioHorario diaInteiro(LocalDate data, Profissional profissional, String motivo) {
+        BloqueioHorario b = new BloqueioHorario();
+        b.setId(UUID.randomUUID());
+        b.setBarbearia(barbearia);
+        b.setData(data);
+        b.setProfissional(profissional);
+        b.setMotivo(motivo);
+        return b;
     }
 }
