@@ -21,10 +21,13 @@ public interface ProfissionalRepository extends JpaRepository<Profissional, UUID
 
     Optional<Profissional> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
 
-    // profissionais ativos que fazem o serviço escolhido pelo cliente
+    // o profissional ligado a uma conta (o dono ou um funcionário)
+    Optional<Profissional> findByUsuarioId(UUID usuarioId);
+
+    // profissionais ativos, que atendem clientes e fazem o serviço escolhido pelo cliente
     @Query("""
             select p from Profissional p join p.servicos s
-            where p.barbearia.id = :barbeariaId and p.ativo = true and s.id = :servicoId
+            where p.barbearia.id = :barbeariaId and p.ativo = true and p.atende = true and s.id = :servicoId
             order by p.nome
             """)
     List<Profissional> buscarAtivosQueFazemOServico(@Param("barbeariaId") UUID barbeariaId,
