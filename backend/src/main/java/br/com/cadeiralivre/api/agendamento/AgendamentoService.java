@@ -150,13 +150,18 @@ public class AgendamentoService {
     @Transactional
     public AgendamentoResponse aprovar(UUID id) {
         Agendamento a = buscarPendente(id);
-        // trava a agenda do profissional até a aprovação terminar: se duas aprovações do mesmo horário
-        // chegarem juntas, a segunda espera a primeira acabar e aí já enxerga o conflito
-        profissionalRepository.buscarComTrava(a.getProfissional().getId());
-        // reconfere o conflito no momento da aprovação (RF21), na agenda do profissional
-        if (agendamentoRepository.existeConflito(a.getProfissional().getId(), a.getData(),
-                StatusAgendamento.APROVADO, a.getHoraInicio(), a.getHoraFim())) {
-            throw ApiException.conflito("O profissional já tem um agendamento aprovado nesse horário.");
+        // todos os profissionais dos itens, sempre na mesma ordem (por id) para duas aprovações não travarem uma à outra
+        List<UUID> profissionais = a.getItens().stream().map(i -> i.getProfissional().getId())
+                .distinct().sorted().toList();
+        for (UUID profissionalId : profissionais) {
+            // trava a agenda do profissional até a aprovação terminar: se duas aprovações do mesmo horário
+            // chegarem juntas, a segunda espera a primeira acabar e aí já enxerga o conflito
+            profissionalRepository.buscarComTrava(profissionalId);
+            // reconfere o conflito no momento da aprovação (RF21), na agenda de cada profissional
+            if (agendamentoRepository.existeConflito(profissionalId, a.getData(),
+                    StatusAgendamento.APROVADO, a.getHoraInicio(), a.getHoraFim())) {
+                throw ApiException.conflito("O profissional já tem um agendamento aprovado nesse horário.");
+            }
         }
         a.setStatus(StatusAgendamento.APROVADO);
         auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_APROVADO, detalheParaAuditoria(a));
