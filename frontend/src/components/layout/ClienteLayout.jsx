@@ -27,7 +27,7 @@ export default function ClienteLayout() {
             <NavLink to="/buscar">buscar salões</NavLink>
             <NavLink to="/meus-agendamentos">meus agendamentos</NavLink>
             <ClienteNotificationBell />
-            <button type="button" className="navlink" onClick={() => { sair(); navigate('/acesso') }}>sair</button>
+            <button type="button" className="navlink" onClick={async () => { await sair(); navigate('/acesso') }}>sair</button>
           </nav>
         </div>
       </header>
