@@ -14,21 +14,34 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import br.com.cadeiralivre.api.servico.dto.ComboResponse;
 import br.com.cadeiralivre.api.servico.dto.ServicoRequest;
 import br.com.cadeiralivre.api.servico.dto.ServicoResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 
+/** Rotas do catálogo no painel (exige JWT com papel DONO). A barbearia vem do token, nunca do corpo. */
 @RestController
 @RequestMapping("/painel/servicos")
 @RequiredArgsConstructor
 public class PainelServicoController {
 
     private final ServicoService servicoService;
+    private final ComboService comboService;
+
+    /** O que a tela de serviços mostra: os serviços, os combos e quem pode ser escolhido para eles. */
+    public record ServicosDoPainel(List<ServicoResponse> servicos, List<ComboResponse> combos,
+                                   List<ProfissionalResumo> profissionais) {
+    }
+
+    public record ProfissionalResumo(UUID id, String nome) {
+    }
 
     @GetMapping
-    public List<ServicoResponse> listar() {
-        return servicoService.listar();
+    public ServicosDoPainel listar() {
+        List<ProfissionalResumo> profissionais = servicoService.profissionaisQueAtendem().stream()
+                .map(p -> new ProfissionalResumo(p.getId(), p.getNome())).toList();
+        return new ServicosDoPainel(servicoService.listar(), comboService.listar(), profissionais);
     }
 
     @PostMapping
