@@ -75,6 +75,10 @@ public class Profissional {
     @Column(nullable = false)
     private boolean encaminhar = false;
 
+    // código que o funcionário usa para criar o próprio login; null depois de usado
+    @Column(name = "codigo_convite", unique = true, length = 8)
+    private String codigoConvite;
+
     @ManyToMany
     @JoinTable(name = "profissional_servico",
             joinColumns = @JoinColumn(name = "profissional_id"),
