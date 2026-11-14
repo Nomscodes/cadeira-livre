@@ -1,16 +1,18 @@
 import { useLayoutEffect } from 'react'
-import { getTheme } from './salonThemes'
+import { getTheme, temaDaCor } from './salonThemes'
 
 /**
  * Aplica o tema do salao enquanto estiver montado.
+ * `cor` e a cor primaria que vem do backend (#RRGGBB); `themeId` e o id de um dos 14 temas
+ * (usado pelas telas que ainda nao foram ligadas a API).
  * As variaveis vao para <html> (e nao para um <div>) porque modais e toasts
  * sao renderizados fora da arvore do portal e tambem precisam da cor do salao.
  * Ao sair do portal tudo volta para a identidade Cadeira Livre.
  */
-export default function ThemeScope({ themeId, children }) {
+export default function ThemeScope({ cor, themeId, children }) {
   useLayoutEffect(() => {
-    if (!themeId) return undefined // sem tema: mantem a identidade Cadeira Livre
-    const theme = getTheme(themeId)
+    if (!cor && !themeId) return undefined // sem tema: mantem a identidade Cadeira Livre
+    const theme = cor ? temaDaCor(cor) : getTheme(themeId)
     const root = document.documentElement
     const meta = document.querySelector('meta[name="theme-color"]')
     const prevMeta = meta?.getAttribute('content')
@@ -25,7 +27,7 @@ export default function ThemeScope({ themeId, children }) {
       root.style.removeProperty('--bg')
       if (meta && prevMeta) meta.setAttribute('content', prevMeta)
     }
-  }, [themeId])
+  }, [cor, themeId])
 
   return children
 }
