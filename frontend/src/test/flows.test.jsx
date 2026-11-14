@@ -55,6 +55,31 @@ describe('login', () => {
     expect(await screen.findByRole('heading', { name: 'Meu portal' }, espera)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/painel')
   })
+  it('a mesma tela leva o dono ao painel e o funcionario a agenda', async () => {
+    const user = userEvent.setup()
+    for (const [login, destino] of [['admin', '/painel'], ['func', '/agenda']]) {
+      window.localStorage.clear()
+      const v = abrir('/login')
+      await user.type(await screen.findByLabelText('e-mail'), login)
+      await user.type(screen.getByLabelText('senha'), login)
+      await user.click(screen.getByRole('button', { name: 'Entrar' }))
+      await waitFor(() => expect(window.location.pathname).toBe(destino), espera)
+      v.unmount()
+    }
+    expect(JSON.parse(window.localStorage.getItem('cl:staff')).usuario).toMatchObject({ nome: 'Rafael Lima', papel: 'FUNCIONARIO' })
+  })
+  it('funcionario cai na propria agenda e nao abre o painel', async () => {
+    const user = userEvent.setup()
+    abrir('/login')
+    await user.type(await screen.findByLabelText('e-mail'), 'func@teste.com')
+    await user.type(screen.getByLabelText('senha'), 'func')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('heading', { name: /Minha agenda/, level: 1 }, espera)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/agenda')
+    window.history.pushState({}, '', '/painel')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    await waitFor(() => expect(window.location.pathname).toBe('/agenda'), espera)
+  })
   it('mostra erro com senha errada', async () => {
     const user = userEvent.setup()
     abrir('/login')
@@ -294,7 +319,7 @@ describe('painel do responsavel', () => {
 })
 
 describe('tela do funcionario', () => {
-  const entrarFunc = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'funcionario', salaoId: 's1', profissionalId: 'p1' } }))
+  const entrarFunc = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1', profissionalId: 'p1' } }))
   it('mostra perfil, indicadores e a lista de agendamentos com abas', async () => {
     const user = userEvent.setup()
     entrarFunc()
@@ -323,7 +348,7 @@ describe('tela do funcionario', () => {
 describe('agenda do funcionario', () => {
   it('abre detalhe de agendamento e permite alertar', async () => {
     const user = userEvent.setup()
-    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'funcionario', salaoId: 's1', profissionalId: 'p1' } }))
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1', profissionalId: 'p1' } }))
     abrir('/agenda')
     await screen.findByRole('heading', { name: /Minha agenda/, level: 1 }, espera)
     // procura um dia com agendamento: os de teste ficam 2 e 3 dias uteis a frente
@@ -440,7 +465,7 @@ describe('saiba mais em grade', () => {
 describe('notificacoes abrem em modal', () => {
   const entrarComo = (tipo) => window.localStorage.setItem('cl:staff', JSON.stringify(tipo === 'adm'
     ? { token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }
-    : { token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'funcionario', salaoId: 's1', profissionalId: 'p1' } }))
+    : { token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1', profissionalId: 'p1' } }))
 
   it('o painel do sino so lista; clicar abre o modal da notificacao e marca como lida', async () => {
     const user = userEvent.setup()
@@ -550,7 +575,7 @@ describe('calendario e horarios do administrador', () => {
 describe('atalho somente teste na agenda do funcionario', () => {
   it('aparece identificado como teste e liga a permissao que o admin controla', async () => {
     const user = userEvent.setup()
-    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'funcionario', salaoId: 's1', profissionalId: 'p1' } }))
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1', profissionalId: 'p1' } }))
     abrir('/agenda')
     expect(await screen.findByText('somente teste', {}, espera)).toBeInTheDocument()
     expect(screen.getByText(/No sistema final esta opção não existe nesta tela/)).toBeInTheDocument()

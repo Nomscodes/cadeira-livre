@@ -9,8 +9,8 @@ const staff = async (email = 'admin', senha = 'admin') => {
   window.localStorage.setItem('cl:staff', JSON.stringify(s))
   return s
 }
-/** O funcionario nao tem login no backend; ele so existe no prototipo, entao entra direto pelo token simulado. */
-const funcionario = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'funcionario' } }))
+/** Sessao do funcionario de exemplo (a mesma que o login func/func devolve). */
+const funcionario = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1' } }))
 const cliente = () => window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
 
 /** primeiro dia util dentro de `limite` dias a partir de amanha que o salao tenha horario livre */
@@ -35,13 +35,19 @@ describe('autenticacao', () => {
     const gabriel = await api.post('/auth/login', { email: 'cliente@teste.com', senha: '12345678' })
     expect(gabriel.usuario).toEqual({ id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null })
   })
-  it('recusa senha errada e o funcionario, que nao tem login no backend', async () => {
-    await expect(api.post('/auth/login', { email: 'admin', senha: 'x' })).rejects.toMatchObject({ status: 401 })
-    await expect(api.post('/auth/login', { email: 'func@teste.com', senha: 'func' })).rejects.toMatchObject({ status: 401, message: 'E-mail ou senha incorretos.' })
+  it('funcionario entra pela mesma rota e recebe o papel FUNCIONARIO', async () => {
+    const f = await api.post('/auth/login', { email: 'func@teste.com', senha: 'func' })
+    expect(f.usuario).toEqual({ id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1' })
+    expect((await api.post('/auth/login', { email: 'func', senha: 'func' })).usuario.papel).toBe('FUNCIONARIO')
+  })
+  it('recusa senha errada', async () => {
+    await expect(api.post('/auth/login', { email: 'admin', senha: 'x' })).rejects.toMatchObject({ status: 401, message: 'E-mail ou senha incorretos.' })
+    await expect(api.post('/auth/login', { email: 'func', senha: 'x' })).rejects.toMatchObject({ status: 401 })
   })
   it('o papel vem do cadastro do usuario, nao do formulario', async () => {
     // mesmo que alguem envie um papel diferente, o servidor ignora e usa o do cadastro
     expect((await api.post('/auth/login', { email: 'admin', senha: 'admin', papel: 'CLIENTE' })).usuario.papel).toBe('DONO')
+    expect((await api.post('/auth/login', { email: 'func', senha: 'func', papel: 'DONO' })).usuario.papel).toBe('FUNCIONARIO')
   })
   it('cadastro do dono exige o aceite dos termos, cria a barbearia oculta e impede e-mail repetido', async () => {
     const dados = { nome: 'Joao Silva', razaoSocial: 'Painel', documento: '12345678901', email: 'joao@x.com', senha: '12345678' }
