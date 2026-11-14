@@ -15,5 +15,7 @@ public record CadastroDonoRequest(
         @NotBlank @Size(min = 8, max = 72) String senha,
         @NotNull(message = "é preciso aceitar os termos de uso e a política de privacidade")
         @AssertTrue(message = "é preciso aceitar os termos de uso e a política de privacidade")
-        Boolean aceitouTermos) {
+        Boolean aceitouTermos,
+        // como o dono atua: autonomo (também atende) ou equipe (só gerencia). Se não vier, vale autonomo
+        @Pattern(regexp = "autonomo|equipe", message = "escolha autonomo ou equipe") String atuacao) {
 }

@@ -65,6 +65,7 @@ public class AuthService {
         validarEmailUnico(emailHash);
 
         Barbearia barbearia = barbeariaService.criar(req.razaoSocial(), req.documento());
+        if (req.atuacao() != null) barbearia.setAtuacao(req.atuacao());
 
         DonoBarbearia dono = new DonoBarbearia();
         dono.setNome(req.nome().trim());
@@ -121,9 +122,12 @@ public class AuthService {
     // abre a sessão no banco e gera o token com o id dela
     private SessaoResponse sessao(Usuario u) {
         UUID barbeariaId = u instanceof DonoBarbearia d ? d.getBarbearia().getId() : null;
+        // o painel usa o profissional da conta para marcar "(você)" nas listas; o cliente não tem
+        UUID profissionalId = barbeariaId == null ? null : profissionalRepository.findByUsuarioId(u.getId())
+                .map(Profissional::getId).orElse(null);
         Sessao sessaoAberta = sessaoService.abrir(u);
         String token = jwtService.gerar(u.getId(), u.getPapel(), barbeariaId, sessaoAberta.getId());
-        return new SessaoResponse(token,
-                new SessaoResponse.UsuarioSessao(u.getId(), u.getNome(), u.getPapel().name(), barbeariaId));
+        return new SessaoResponse(token, new SessaoResponse.UsuarioSessao(
+                u.getId(), u.getNome(), u.getPapel().name(), barbeariaId, profissionalId));
     }
 }
