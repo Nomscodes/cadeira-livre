@@ -41,6 +41,8 @@ import br.com.cadeiralivre.api.barbearia.BarbeariaService;
 import br.com.cadeiralivre.api.common.cripto.Criptografia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorario;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorarioRepository;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.security.JwtService;
 import br.com.cadeiralivre.api.security.Sessao;
@@ -64,6 +66,9 @@ class AuthServiceTest {
     private ProfissionalRepository profissionalRepository;
 
     @Mock
+    private ProfissionalHorarioRepository profissionalHorarioRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @Mock
@@ -85,7 +90,7 @@ class AuthServiceTest {
     @BeforeEach
     void preparar() {
         // a Criptografia e o Clock não são mocks, por isso o service é criado na mão
-        authService = new AuthService(usuarioRepository, barbeariaService, profissionalRepository, passwordEncoder,
+        authService = new AuthService(usuarioRepository, barbeariaService, profissionalRepository, profissionalHorarioRepository, passwordEncoder,
                 jwtService, sessaoService, criptografia, Clock.fixed(agora, ZoneOffset.UTC));
 
         sessaoAberta = new Sessao();
@@ -164,6 +169,12 @@ class AuthServiceTest {
         assertEquals("Gabriel", profissional.getNomeSocial());
         assertTrue(profissional.isAdministrador());
         assertTrue(profissional.isAtende());
+        // e já nasce com a semana padrão de trabalho (7 dias, seg a sex atendendo)
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ProfissionalHorario>> semana = ArgumentCaptor.forClass(List.class);
+        verify(profissionalHorarioRepository).saveAll(semana.capture());
+        assertEquals(7, semana.getValue().size());
+        assertSame(profissional, semana.getValue().get(0).getProfissional());
     }
 
     @Test
