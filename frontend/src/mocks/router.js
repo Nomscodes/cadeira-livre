@@ -24,8 +24,11 @@ function sessionFromToken(token) {
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 
+// Na tela, a demora imita a rede de verdade. Nos testes ela so deixa a suite lenta e instavel, entao fica em 0.
+const demora = () => (import.meta.env.MODE === 'test' ? 0 : 120 + Math.random() * 180)
+
 export async function mockRequest(method, path, { body, query, token } = {}) {
-  await delay(120 + Math.random() * 180)
+  await delay(demora())
   const cleanPath = path.split('?')[0].replace(/\/$/, '') || '/'
   for (const r of routes) {
     if (r.method !== method) continue

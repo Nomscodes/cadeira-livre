@@ -42,6 +42,9 @@ export const toMinutes = (hhmm) => {
 }
 export const toHHMM = (min) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`
 
+/** O backend devolve a hora com segundos ("09:00:00"); a tela mostra só "09:00". */
+export const hhmm = (hora) => (hora ? String(hora).slice(0, 5) : '')
+
 /** Ex.: 40 -> "40 min", 70 -> "1h10" */
 export const formatDuration = (min) => {
   if (min < 60) return `${min} min`
