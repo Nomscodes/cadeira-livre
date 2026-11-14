@@ -6,11 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -20,7 +23,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -30,6 +32,8 @@ import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.profissional.dto.ProfissionalRequest;
 import br.com.cadeiralivre.api.profissional.dto.ProfissionalResponse;
+import br.com.cadeiralivre.api.servico.Combo;
+import br.com.cadeiralivre.api.servico.ComboRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
@@ -41,7 +45,13 @@ class ProfissionalServiceTest {
     private ProfissionalRepository profissionalRepository;
 
     @Mock
+    private ProfissionalHorarioRepository horarioRepository;
+
+    @Mock
     private ServicoRepository servicoRepository;
+
+    @Mock
+    private ComboRepository comboRepository;
 
     @Mock
     private BarbeariaRepository barbeariaRepository;
@@ -49,21 +59,19 @@ class ProfissionalServiceTest {
     @InjectMocks
     private ProfissionalService profissionalService;
 
-    private final UUID minhaBarbearia = UUID.randomUUID();
-
-    private Barbearia barbearia;
+    private final Barbearia minhaBarbearia = new Barbearia();
     private Servico corte;
-    private Servico barba;
 
     @BeforeEach
-    void preparar() {
-        // simula o que o JwtAuthenticationFilter faz com o token do dono
-        TenantContext.set(minhaBarbearia);
-
-        barbearia = new Barbearia();
-        barbearia.setId(minhaBarbearia);
-        corte = servico("Corte");
-        barba = servico("Barba");
+    void logarComoDono() {
+        minhaBarbearia.setId(UUID.randomUUID());
+        minhaBarbearia.setNomeFantasia("Barbearia Gabriel Naoki");
+        TenantContext.set(minhaBarbearia.getId());
+        corte = new Servico();
+        corte.setId(UUID.randomUUID());
+        corte.setNome("Corte");
+        corte.setPreco(new BigDecimal("40.00"));
+        corte.setDuracaoMinutos(30);
     }
 
     @AfterEach
@@ -71,39 +79,25 @@ class ProfissionalServiceTest {
         TenantContext.clear();
     }
 
-    // ---------- isolamento por barbearia ----------
+    // ---------- lista ----------
 
     @Test
-    void listarBuscaSoOsProfissionaisDaBarbeariaDoToken() {
-        profissionalService.listar();
+    void listarMostraSoOsAtivosComOHorarioDeCadaUm() {
+        Profissional gabriel = profissional("Gabriel Naoki", true);
+        Profissional saiu = profissional("Diego Santos", false);
+        saiu.setAtivo(false);
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(minhaBarbearia.getId())).thenReturn(List.of(saiu, gabriel));
+        when(horarioRepository.findAllByProfissionalBarbeariaId(minhaBarbearia.getId())).thenReturn(List.of(
+                new ProfissionalHorario(gabriel, DayOfWeek.SATURDAY, LocalTime.of(8, 0), LocalTime.of(12, 0), true)));
 
-        verify(profissionalRepository).findAllByBarbeariaIdOrderByNome(minhaBarbearia);
-    }
+        List<ProfissionalResponse> lista = profissionalService.listar();
 
-    @Test
-    void editarProfissionalDeOutraBarbeariaDevolve404() {
-        UUID profissionalDeOutraBarbearia = UUID.randomUUID();
-        when(profissionalRepository.findByIdAndBarbeariaId(profissionalDeOutraBarbearia, minhaBarbearia))
-                .thenReturn(Optional.empty());
-
-        ApiException erro = assertThrows(ApiException.class,
-                () -> profissionalService.atualizar(profissionalDeOutraBarbearia, pedido(Set.of(), null)));
-
-        assertEquals(404, erro.getStatus().value());
-    }
-
-    @Test
-    void servicoDeOutraBarbeariaDevolve422ENaoSalva() {
-        UUID servicoDeOutraBarbearia = UUID.randomUUID();
-        when(barbeariaRepository.getReferenceById(minhaBarbearia)).thenReturn(barbearia);
-        when(servicoRepository.findAllByIdInAndBarbeariaId(Set.of(servicoDeOutraBarbearia), minhaBarbearia))
-                .thenReturn(List.of());
-
-        ApiException erro = assertThrows(ApiException.class,
-                () -> profissionalService.criar(pedido(Set.of(servicoDeOutraBarbearia), null)));
-
-        assertEquals(422, erro.getStatus().value());
-        verify(profissionalRepository, never()).save(any());
+        assertEquals(1, lista.size());
+        ProfissionalResponse resposta = lista.get(0);
+        assertEquals("Gabriel Naoki", resposta.nome());
+        assertTrue(resposta.ehAdmin());
+        assertEquals(new ProfissionalResponse.Dia(true, "08:00", "12:00"), resposta.horarios().get("6"));
+        assertFalse(resposta.horarios().get("1").ativo()); // dia sem horário vem como folga
     }
 
     @Test
@@ -115,103 +109,139 @@ class ProfissionalServiceTest {
         assertEquals(403, erro.getStatus().value());
     }
 
-    // ---------- cadastro e edição ----------
+    // ---------- cadastro ----------
 
     @Test
-    void criarVinculaABarbeariaDoTokenEOsServicosEscolhidos() {
-        when(barbeariaRepository.getReferenceById(minhaBarbearia)).thenReturn(barbearia);
-        when(servicoRepository.findAllByIdInAndBarbeariaId(Set.of(corte.getId(), barba.getId()), minhaBarbearia))
-                .thenReturn(List.of(corte, barba));
-        when(profissionalRepository.save(any(Profissional.class))).thenAnswer(chamada -> chamada.getArgument(0));
+    void cadastroGeraConviteESemanaPadrao() {
+        when(barbeariaRepository.getReferenceById(minhaBarbearia.getId())).thenReturn(minhaBarbearia);
+        when(servicoRepository.findAllByIdInAndBarbeariaId(Set.of(corte.getId()), minhaBarbearia.getId())).thenReturn(List.of(corte));
+        when(horarioRepository.saveAll(anyList())).thenAnswer(chamada -> chamada.getArgument(0));
 
-        ProfissionalResponse criado = profissionalService.criar(new ProfissionalRequest(
-                "  Rafael Lima  ", "62999990001", Set.of(corte.getId(), barba.getId()), null));
+        ProfissionalResponse.ComConvite criado = profissionalService.criar(new ProfissionalRequest(" Gabriel Naoki ",
+                "Naoki", "(62) 98888-7777", true, null, Set.of(corte.getId())));
 
-        ArgumentCaptor<Profissional> salvo = ArgumentCaptor.forClass(Profissional.class);
-        verify(profissionalRepository).save(salvo.capture());
-        assertEquals(minhaBarbearia, salvo.getValue().getBarbearia().getId());
-        assertEquals("Rafael Lima", criado.nome());
-        assertEquals(2, criado.servicoIds().size());
-        assertTrue(criado.ativo());
+        verify(profissionalRepository).save(any(Profissional.class));
+        assertTrue(criado.convite().matches("[A-Z2-9]{6}")); // 6 letras e números
+        ProfissionalResponse p = criado.profissional();
+        assertEquals("Gabriel Naoki", p.nome());
+        assertEquals("Naoki", p.nomeSocial());
+        assertEquals("(62) 98888-7777", p.whatsapp());
+        assertTrue(p.encaminhar());
+        assertTrue(p.atende()); // sem informar, atende
+        assertFalse(p.ehAdmin());
+        assertEquals(List.of(corte.getId()), p.servicoIds());
+        assertEquals(new ProfissionalResponse.Dia(true, "09:00", "18:00"), p.horarios().get("1"));
+        assertFalse(p.horarios().get("0").ativo());
     }
 
     @Test
-    void criarSemServicosESemTelefoneFuncionaNormalmente() {
-        when(barbeariaRepository.getReferenceById(minhaBarbearia)).thenReturn(barbearia);
-        when(profissionalRepository.save(any(Profissional.class))).thenAnswer(chamada -> chamada.getArgument(0));
+    void encaminharSemWhatsappDevolve422() {
+        when(barbeariaRepository.getReferenceById(minhaBarbearia.getId())).thenReturn(minhaBarbearia);
 
-        ProfissionalResponse criado = profissionalService.criar(new ProfissionalRequest("Rafael", "  ", null, null));
+        ApiException erro = assertThrows(ApiException.class, () -> profissionalService.criar(
+                new ProfissionalRequest("Gabriel Naoki", null, "  ", true, true, null)));
 
-        assertTrue(criado.servicoIds().isEmpty());
-        assertNull(criado.telefone());
-        verify(servicoRepository, never()).findAllByIdInAndBarbeariaId(any(), any());
+        assertEquals("Para ativar o encaminhamento, informe o WhatsApp do profissional.", erro.getMessage());
+        verify(profissionalRepository, never()).save(any());
     }
 
     @Test
-    void editarTrocaOsServicosDoProfissional() {
-        Profissional rafael = profissionalExistente(true);
-        rafael.getServicos().add(corte);
-        when(servicoRepository.findAllByIdInAndBarbeariaId(Set.of(barba.getId()), minhaBarbearia))
-                .thenReturn(List.of(barba));
+    void servicoDeOutroSalaoDevolve422() {
+        when(barbeariaRepository.getReferenceById(minhaBarbearia.getId())).thenReturn(minhaBarbearia);
+        UUID deOutroSalao = UUID.randomUUID();
+        when(servicoRepository.findAllByIdInAndBarbeariaId(Set.of(deOutroSalao), minhaBarbearia.getId())).thenReturn(List.of());
 
-        ProfissionalResponse editado = profissionalService.atualizar(rafael.getId(), pedido(Set.of(barba.getId()), null));
+        ApiException erro = assertThrows(ApiException.class, () -> profissionalService.criar(
+                new ProfissionalRequest("Gabriel Naoki", null, null, false, true, Set.of(deOutroSalao))));
 
-        assertEquals(List.of(barba.getId()), editado.servicoIds());
+        assertEquals(422, erro.getStatus().value());
     }
 
-    // ---------- exclusão lógica ----------
+    // ---------- edição ----------
 
     @Test
-    void excluirDesativaOProfissionalEmVezDeApagar() {
-        Profissional rafael = profissionalExistente(true);
+    void quemDeixaDeAtenderFicaSemServicosESaiDosCombos() {
+        Profissional gabriel = existente("Gabriel Naoki", false);
+        gabriel.getServicos().add(corte);
+        Combo combo = new Combo();
+        combo.getProfissionais().add(gabriel);
+        when(comboRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(minhaBarbearia.getId())).thenReturn(List.of(combo));
 
-        profissionalService.excluir(rafael.getId());
+        ProfissionalResponse.ComConvite editado = profissionalService.atualizar(gabriel.getId(),
+                new ProfissionalRequest("Gabriel Naoki", null, null, false, false, Set.of(corte.getId())));
 
-        assertFalse(rafael.isAtivo());
+        assertFalse(editado.profissional().atende());
+        assertTrue(gabriel.getServicos().isEmpty());
+        assertTrue(combo.getProfissionais().isEmpty());
+        assertNull(editado.convite()); // o convite só aparece no cadastro
+    }
+
+    // ---------- remoção ----------
+
+    @Test
+    void naoDaPraRemoverOUnicoAdministrador() {
+        Profissional gabriel = existente("Gabriel Naoki", true);
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(minhaBarbearia.getId())).thenReturn(List.of(gabriel));
+
+        ApiException erro = assertThrows(ApiException.class, () -> profissionalService.excluir(gabriel.getId()));
+
+        assertEquals(422, erro.getStatus().value());
+        assertTrue(gabriel.isAtivo());
+    }
+
+    @Test
+    void administradorPodeSairSeHouverOutro() {
+        Profissional gabriel = existente("Gabriel Naoki", true);
+        Profissional diego = profissional("Diego Santos", true);
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(minhaBarbearia.getId())).thenReturn(List.of(diego, gabriel));
+
+        profissionalService.excluir(gabriel.getId());
+
+        assertFalse(gabriel.isAtivo());
+    }
+
+    @Test
+    void removerDesativaTiraDosServicosEDosCombosEApagaOConvite() {
+        Profissional diego = existente("Diego Santos", false);
+        diego.setCodigoConvite("ABC234");
+        diego.getServicos().add(corte);
+        Combo combo = new Combo();
+        combo.getProfissionais().add(diego);
+        when(comboRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(minhaBarbearia.getId())).thenReturn(List.of(combo));
+
+        profissionalService.excluir(diego.getId());
+
+        assertFalse(diego.isAtivo());
+        assertNull(diego.getCodigoConvite());
+        assertTrue(diego.getServicos().isEmpty());
+        assertTrue(combo.getProfissionais().isEmpty());
         verify(profissionalRepository, never()).delete(any());
     }
 
     @Test
-    void editarComAtivoTrueReativaOProfissional() {
-        Profissional rafael = profissionalExistente(false);
+    void profissionalJaRemovidoDevolve404() {
+        Profissional diego = existente("Diego Santos", false);
+        diego.setAtivo(false);
 
-        ProfissionalResponse editado = profissionalService.atualizar(rafael.getId(), pedido(Set.of(), true));
+        ApiException erro = assertThrows(ApiException.class, () -> profissionalService.excluir(diego.getId()));
 
-        assertTrue(editado.ativo());
-    }
-
-    @Test
-    void editarSemInformarAtivoMantemComoEsta() {
-        Profissional rafael = profissionalExistente(false);
-
-        ProfissionalResponse editado = profissionalService.atualizar(rafael.getId(), pedido(Set.of(), null));
-
-        assertFalse(editado.ativo());
+        assertEquals(404, erro.getStatus().value());
     }
 
     // ---------- métodos de apoio ----------
 
-    private Servico servico(String nome) {
-        Servico s = new Servico();
-        s.setId(UUID.randomUUID());
-        s.setBarbearia(barbearia);
-        s.setNome(nome);
-        s.setPreco(new BigDecimal("40.00"));
-        s.setDuracaoMinutos(30);
-        return s;
-    }
-
-    private Profissional profissionalExistente(boolean ativo) {
+    private Profissional profissional(String nome, boolean administrador) {
         Profissional p = new Profissional();
         p.setId(UUID.randomUUID());
-        p.setBarbearia(barbearia);
-        p.setNome("Rafael Lima");
-        p.setAtivo(ativo);
-        when(profissionalRepository.findByIdAndBarbeariaId(p.getId(), minhaBarbearia)).thenReturn(Optional.of(p));
+        p.setBarbearia(minhaBarbearia);
+        p.setNome(nome);
+        p.setAdministrador(administrador);
         return p;
     }
 
-    private ProfissionalRequest pedido(Set<UUID> servicoIds, Boolean ativo) {
-        return new ProfissionalRequest("Rafael Lima", null, servicoIds, ativo);
+    private Profissional existente(String nome, boolean administrador) {
+        Profissional p = profissional(nome, administrador);
+        when(profissionalRepository.findByIdAndBarbeariaId(p.getId(), minhaBarbearia.getId())).thenReturn(Optional.of(p));
+        return p;
     }
 }
