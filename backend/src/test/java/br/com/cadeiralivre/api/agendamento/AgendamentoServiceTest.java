@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -36,6 +37,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import br.com.cadeiralivre.api.agendamento.dto.AgendamentoCriadoResponse;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoRequest;
 import br.com.cadeiralivre.api.agendamento.dto.AgendamentoResponse;
 import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
@@ -47,6 +49,8 @@ import br.com.cadeiralivre.api.notificacao.NotificacaoService;
 import br.com.cadeiralivre.api.notificacao.TipoNotificacao;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
+import br.com.cadeiralivre.api.servico.Combo;
+import br.com.cadeiralivre.api.servico.ComboRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
@@ -67,6 +71,9 @@ class AgendamentoServiceTest {
 
     @Mock
     private ProfissionalRepository profissionalRepository;
+
+    @Mock
+    private ComboRepository comboRepository;
 
     @Mock
     private DisponibilidadeService disponibilidadeService;
@@ -97,17 +104,20 @@ class AgendamentoServiceTest {
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
         agendamentoService = new AgendamentoService(agendamentoRepository, barbeariaRepository, servicoRepository,
-                profissionalRepository, disponibilidadeService, auditoriaService, clienteRepository, notificacaoService, relogio);
+                profissionalRepository, comboRepository, disponibilidadeService, auditoriaService, clienteRepository,
+                notificacaoService, relogio);
 
         barbearia = new Barbearia();
         barbearia.setId(UUID.randomUUID());
         barbearia.setSlug("barbearia-teste");
         barbearia.setPublico(true);
+        barbearia.setNomeFantasia("Barbearia Gabriel Naoki");
 
         corte = new Servico();
         corte.setId(UUID.randomUUID());
         corte.setNome("Corte");
         corte.setDuracaoMinutos(30);
+        corte.setPreco(new BigDecimal("40.00"));
         corte.setBarbearia(barbearia);
 
         rafael = new Profissional();
@@ -126,18 +136,53 @@ class AgendamentoServiceTest {
     // ---------- solicitação pelo cliente (rota pública) ----------
 
     @Test
-    void solicitacaoDoClienteNasceComoPendenteComOProfissionalEscolhido() {
+    void solicitacaoDoClienteNasceComoPendenteComOsItens() {
         salaoServicoEProfissionalExistem();
-        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(true);
+        when(disponibilidadeService.estaLivre(barbearia, List.of(rafael), amanha, dezHoras, 30)).thenReturn(true);
         when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(chamada -> chamada.getArgument(0));
 
-        AgendamentoResponse resposta = agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras));
+        AgendamentoCriadoResponse resposta = agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras));
 
-        assertEquals(StatusAgendamento.PENDENTE, resposta.status());
-        assertEquals(dezEMeia, resposta.horaFim()); // 10:00 + 30 min do corte
-        assertEquals("Rafael Lima", resposta.profissional());
+        ArgumentCaptor<Agendamento> salvo = ArgumentCaptor.forClass(Agendamento.class);
+        verify(agendamentoRepository).save(salvo.capture());
+        Agendamento a = salvo.getValue();
+        assertEquals("PENDENTE", resposta.status());
+        assertEquals("Barbearia Gabriel Naoki", resposta.salao().nome());
+        assertEquals(dezEMeia, a.getHoraFim()); // 10:00 + 30 min do corte
+        assertEquals(new BigDecimal("40.00"), a.getValor());
+        assertEquals(1, a.getItens().size());
+        assertSame(rafael, a.getProfissional()); // o profissional do primeiro item é o principal
+        assertSame(corte, a.getServico());
         // o dono fica sabendo do pedido novo
         verify(notificacaoService).paraDono(any(Agendamento.class), eq(TipoNotificacao.NOVO_AGENDAMENTO));
+    }
+
+    @Test
+    void servicoMaisComboSomamDuracaoEValor() {
+        salaoServicoEProfissionalExistem();
+        Servico barba = servico("Barba", "30.00", 20);
+        Servico sobrancelha = servico("Sobrancelha", "15.00", 10);
+        Combo combo = new Combo();
+        combo.setId(UUID.randomUUID());
+        combo.setNome("Barba + Sobrancelha");
+        combo.setPreco(new BigDecimal("40.00"));
+        combo.getServicos().addAll(List.of(barba, sobrancelha));
+        combo.getProfissionais().add(rafael);
+        when(comboRepository.findByIdAndBarbeariaIdAndAtivoTrue(combo.getId(), barbearia.getId())).thenReturn(Optional.of(combo));
+        // corte (30) + combo (20 + 10) = 60 minutos
+        when(disponibilidadeService.estaLivre(barbearia, List.of(rafael), amanha, dezHoras, 60)).thenReturn(true);
+        when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(chamada -> chamada.getArgument(0));
+
+        agendamentoService.solicitar("barbearia-teste", new AgendamentoRequest(List.of(
+                new AgendamentoRequest.Item(corte.getId(), null, rafael.getId()),
+                new AgendamentoRequest.Item(null, combo.getId(), rafael.getId())),
+                amanha, dezHoras, "Gabriel Naoki", "(62) 99999-9999"));
+
+        ArgumentCaptor<Agendamento> salvo = ArgumentCaptor.forClass(Agendamento.class);
+        verify(agendamentoRepository).save(salvo.capture());
+        assertEquals(LocalTime.of(11, 0), salvo.getValue().getHoraFim());
+        assertEquals(new BigDecimal("80.00"), salvo.getValue().getValor()); // 40 do corte + 40 do combo
+        assertEquals("Barba + Sobrancelha", salvo.getValue().getItens().get(1).getNome());
     }
 
     @Test
@@ -146,7 +191,7 @@ class AgendamentoServiceTest {
         joao.setId(UUID.randomUUID());
         logarComoCliente(joao.getId());
         salaoServicoEProfissionalExistem();
-        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(true);
+        when(disponibilidadeService.estaLivre(barbearia, List.of(rafael), amanha, dezHoras, 30)).thenReturn(true);
         when(clienteRepository.findById(joao.getId())).thenReturn(Optional.of(joao));
         when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(chamada -> chamada.getArgument(0));
 
@@ -160,7 +205,7 @@ class AgendamentoServiceTest {
     @Test
     void semLoginOAgendamentoFicaSemCliente() {
         salaoServicoEProfissionalExistem();
-        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(true);
+        when(disponibilidadeService.estaLivre(barbearia, List.of(rafael), amanha, dezHoras, 30)).thenReturn(true);
         when(agendamentoRepository.save(any(Agendamento.class))).thenAnswer(chamada -> chamada.getArgument(0));
 
         agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras));
@@ -172,10 +217,9 @@ class AgendamentoServiceTest {
     }
 
     @Test
-    void horarioQueNaoEstaDisponivelDevolve409() {
+    void horarioQueAcabouDeSerOcupadoDevolve409() {
         salaoServicoEProfissionalExistem();
-        // folga, bloqueio, fora do funcionamento ou já aprovado para o profissional
-        when(disponibilidadeService.estaLivre(barbearia, corte, rafael, amanha, dezHoras)).thenReturn(false);
+        when(disponibilidadeService.estaLivre(barbearia, List.of(rafael), amanha, dezHoras, 30)).thenReturn(false);
 
         ApiException erro = assertThrows(ApiException.class,
                 () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
@@ -188,12 +232,22 @@ class AgendamentoServiceTest {
     @Test
     void horarioNoPassadoDevolve422() {
         salaoServicoEProfissionalExistem();
-        LocalDate ontem = LocalDate.of(2026, 11, 9);
 
         ApiException erro = assertThrows(ApiException.class,
-                () -> agendamentoService.solicitar("barbearia-teste", pedido(ontem, dezHoras)));
+                () -> agendamentoService.solicitar("barbearia-teste", pedido(LocalDate.of(2026, 11, 9), dezHoras)));
 
         assertEquals(422, erro.getStatus().value());
+    }
+
+    @Test
+    void whatsappSemDddDevolve422() {
+        when(barbeariaRepository.findBySlug("barbearia-teste")).thenReturn(Optional.of(barbearia));
+
+        ApiException erro = assertThrows(ApiException.class, () -> agendamentoService.solicitar("barbearia-teste",
+                new AgendamentoRequest(List.of(new AgendamentoRequest.Item(corte.getId(), null, rafael.getId())),
+                        amanha, dezHoras, "Gabriel Naoki", "9999-9999")));
+
+        assertEquals("Informe seu nome e um WhatsApp válido, com DDD.", erro.getMessage());
     }
 
     @Test
@@ -208,25 +262,14 @@ class AgendamentoServiceTest {
     }
 
     @Test
-    void servicoQueNaoEhDoSalaoDevolve422() {
-        when(barbeariaRepository.findBySlug("barbearia-teste")).thenReturn(Optional.of(barbearia));
-        when(servicoRepository.findByIdAndBarbeariaId(corte.getId(), barbearia.getId())).thenReturn(Optional.empty());
-
-        ApiException erro = assertThrows(ApiException.class,
-                () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
-
-        assertEquals(422, erro.getStatus().value());
-    }
-
-    @Test
     void servicoDesativadoNaoPodeSerAgendado() {
         corte.setAtivo(false);
-        salaoEServicoExistem();
+        salaoServicoEProfissionalExistem();
 
         ApiException erro = assertThrows(ApiException.class,
                 () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
 
-        assertEquals(422, erro.getStatus().value());
+        assertEquals("Serviço inválido para este salão.", erro.getMessage());
         verify(agendamentoRepository, never()).save(any());
     }
 
@@ -238,20 +281,32 @@ class AgendamentoServiceTest {
         ApiException erro = assertThrows(ApiException.class,
                 () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
 
-        assertEquals(422, erro.getStatus().value());
-        verify(agendamentoRepository, never()).save(any());
+        assertEquals("Profissional inválido para o serviço escolhido.", erro.getMessage());
     }
 
     @Test
-    void profissionalDeOutraBarbeariaDevolve422() {
-        salaoEServicoExistem();
-        when(profissionalRepository.findByIdAndBarbeariaId(rafael.getId(), barbearia.getId())).thenReturn(Optional.empty());
+    void profissionalQueNaoAtendeOuDeOutraBarbeariaDevolve422() {
+        rafael.setAtende(false);
+        when(barbeariaRepository.findBySlug("barbearia-teste")).thenReturn(Optional.of(barbearia));
+        when(profissionalRepository.findByIdAndBarbeariaId(rafael.getId(), barbearia.getId())).thenReturn(Optional.of(rafael));
 
         ApiException erro = assertThrows(ApiException.class,
                 () -> agendamentoService.solicitar("barbearia-teste", pedido(amanha, dezHoras)));
 
-        assertEquals(422, erro.getStatus().value());
+        assertEquals("Este profissional não atende clientes.", erro.getMessage());
         verify(agendamentoRepository, never()).save(any());
+    }
+
+    @Test
+    void itemSemServicoNemComboDevolve422() {
+        when(barbeariaRepository.findBySlug("barbearia-teste")).thenReturn(Optional.of(barbearia));
+        when(profissionalRepository.findByIdAndBarbeariaId(rafael.getId(), barbearia.getId())).thenReturn(Optional.of(rafael));
+
+        ApiException erro = assertThrows(ApiException.class, () -> agendamentoService.solicitar("barbearia-teste",
+                new AgendamentoRequest(List.of(new AgendamentoRequest.Item(null, null, rafael.getId())),
+                        amanha, dezHoras, "Gabriel Naoki", "62999999999")));
+
+        assertEquals("Cada item precisa de um serviço ou de um combo.", erro.getMessage());
     }
 
     // ---------- lista do painel ----------
@@ -459,6 +514,15 @@ class AgendamentoServiceTest {
         when(servicoRepository.findByIdAndBarbeariaId(corte.getId(), barbearia.getId())).thenReturn(Optional.of(corte));
     }
 
+    private Servico servico(String nome, String preco, int minutos) {
+        Servico s = new Servico();
+        s.setId(UUID.randomUUID());
+        s.setNome(nome);
+        s.setPreco(new BigDecimal(preco));
+        s.setDuracaoMinutos(minutos);
+        return s;
+    }
+
     private void salaoServicoEProfissionalExistem() {
         salaoEServicoExistem();
         when(profissionalRepository.findByIdAndBarbeariaId(rafael.getId(), barbearia.getId())).thenReturn(Optional.of(rafael));
@@ -475,7 +539,8 @@ class AgendamentoServiceTest {
     }
 
     private AgendamentoRequest pedido(LocalDate data, LocalTime hora) {
-        return new AgendamentoRequest(corte.getId(), rafael.getId(), data, hora, "Cliente Teste", "62999999999");
+        return new AgendamentoRequest(List.of(new AgendamentoRequest.Item(corte.getId(), null, rafael.getId())),
+                data, hora, "Gabriel Naoki", "62999999999");
     }
 
     // agendamento aprovado para hoje (10/11), começando no horário informado
