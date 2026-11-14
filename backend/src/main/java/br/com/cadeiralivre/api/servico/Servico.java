@@ -1,9 +1,12 @@
 package br.com.cadeiralivre.api.servico;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 import br.com.cadeiralivre.api.barbearia.Barbearia;
+import br.com.cadeiralivre.api.profissional.Profissional;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -11,6 +14,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import lombok.Getter;
@@ -47,4 +51,12 @@ public class Servico {
 
     @Column(nullable = false)
     private boolean ativo = true;
+
+    // aparece entre os "serviços em destaque" no início do portal
+    @Column(nullable = false)
+    private boolean destaque = true;
+
+    // quem faz o serviço; o vínculo é gravado pelo lado do profissional (Profissional.servicos)
+    @ManyToMany(mappedBy = "servicos")
+    private Set<Profissional> profissionais = new HashSet<>();
 }
