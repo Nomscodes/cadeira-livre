@@ -46,7 +46,7 @@ public class NotificacaoService {
     /** Sino do painel: a barbearia vem do JWT. */
     @Transactional(readOnly = true)
     public List<NotificacaoResponse> listarDoDono() {
-        return notificacaoRepository.findTop30ByBarbeariaIdOrderByCriadaEmDesc(TenantContext.require())
+        return notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(TenantContext.require())
                 .stream().map(NotificacaoResponse::de).toList();
     }
 
