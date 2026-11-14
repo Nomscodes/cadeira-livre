@@ -5,6 +5,7 @@ import { api } from '../../lib/http'
 import { useAsync, useDocumentTitle } from '../../lib/hooks'
 import { formatDateTimeBR } from '../../lib/dates'
 import { money } from '../../lib/format'
+import { STATUS, grupoDoStatus } from '../../lib/status'
 import { useToast } from '../../context/ToastContext'
 import StatusChip from '../../components/ui/StatusChip'
 import Button from '../../components/ui/Button'
@@ -13,6 +14,8 @@ import { EmptyState, ErrorState, Loading } from '../../components/ui/States'
 
 const ORDEM = ['confirmado', 'finalizado', 'cancelado']
 const CHIP = { confirmado: 'embreve', finalizado: 'concluido', cancelado: 'cancelado' }
+// status do backend (pendente, aprovado, recusado...) aparecem com o próprio nome; os da API simulada, pelo grupo
+const chipDo = (status) => (STATUS[status] ? status : CHIP[grupoDoStatus(status)])
 
 export default function HistoricoPage() {
   useDocumentTitle('Meus agendamentos')
@@ -22,8 +25,9 @@ export default function HistoricoPage() {
   const { data, loading, error, reload } = useAsync(() => api.get('/cliente/agendamentos', { as: 'cliente' }), [])
 
   const itens = (data || [])
-    .filter((a) => !(ocultar && a.status === 'cancelado'))
-    .sort((a, b) => ORDEM.indexOf(a.status) - ORDEM.indexOf(b.status) || (b.data + b.hora).localeCompare(a.data + a.hora))
+    .map((a) => ({ ...a, grupo: grupoDoStatus(a.status) }))
+    .filter((a) => !(ocultar && a.grupo === 'cancelado'))
+    .sort((a, b) => ORDEM.indexOf(a.grupo) - ORDEM.indexOf(b.grupo) || (b.data + b.hora).localeCompare(a.data + a.hora))
 
   const confirmarCancelamento = async () => {
     try {
@@ -53,7 +57,7 @@ export default function HistoricoPage() {
           <article className="card-box" key={a.id}>
             <div className="hist-head">
               <h2>{a.servicos}</h2>
-              <StatusChip status={CHIP[a.status]} />
+              <StatusChip status={chipDo(a.status)} />
             </div>
             <div className="meta" style={{ marginBottom: 0 }}>
               {a.profissionais} · {a.salao.nome}<br />
@@ -61,8 +65,8 @@ export default function HistoricoPage() {
             </div>
             <div className="hist-actions">
               <Link to={`/${a.salao.slug}`} className="btn small ghost">ver salão</Link>
-              {a.status === 'finalizado' && !a.avaliado && <Link to={`/avaliar/${a.id}`} className="btn small">avaliar</Link>}
-              {a.status === 'confirmado' && (a.podeCancelar
+              {a.grupo === 'finalizado' && !a.avaliado && <Link to={`/avaliar/${a.id}`} className="btn small">avaliar</Link>}
+              {a.grupo === 'confirmado' && (a.podeCancelar
                 ? <Button small variant="danger-outline" onClick={() => setCancelar(a)}>cancelar</Button>
                 : <span className="hint">Prazo de cancelamento encerrado ({a.cancelamentoHoras} h antes)</span>)}
             </div>
