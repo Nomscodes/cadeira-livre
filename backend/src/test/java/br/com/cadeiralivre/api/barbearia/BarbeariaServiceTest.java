@@ -37,6 +37,7 @@ import br.com.cadeiralivre.api.horario.HorarioFuncionamento;
 import br.com.cadeiralivre.api.horario.HorarioFuncionamentoRepository;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
+import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
 
@@ -250,7 +251,96 @@ class BarbeariaServiceTest {
         verify(profissionalRepository).findAllByBarbeariaIdOrderByNome(any());
     }
 
+    // ---------- publicação (RF09) ----------
+
+    @Test
+    void salaoSemServicoNemProfissionalQueAtendaNaoPodePublicar() {
+        Barbearia b = logarComoDonoDe(barbearia(false));
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        gabriel.setAtende(false); // dono de salão com equipe: só gerencia
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(gabriel));
+
+        List<String> problemas = barbeariaService.problemasParaPublicar();
+
+        assertEquals(List.of("Cadastre ao menos um serviço.",
+                "Cadastre ao menos um profissional que atenda clientes (pode ser você mesmo, em Profissionais)."),
+                problemas);
+    }
+
+    @Test
+    void servicoSemProfissionalQueAtendaApareceNosProblemas() {
+        Barbearia b = logarComoDonoDe(barbearia(false));
+        Servico corte = servico(b, "Corte");
+        Servico barba = servico(b, "Barba");
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        gabriel.getServicos().add(corte);
+        Profissional diego = profissional(b, "Diego Santos", false);
+        diego.getServicos().add(barba);
+        diego.setAtivo(false); // inativo não conta
+        when(servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId())).thenReturn(List.of(barba, corte));
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(diego, gabriel));
+
+        assertEquals(List.of("O serviço \"Barba\" não tem nenhum profissional vinculado."),
+                barbeariaService.problemasParaPublicar());
+    }
+
+    @Test
+    void naoDaPraPublicarComProblemasE422LevaALista() {
+        Barbearia b = logarComoDonoDe(barbearia(false));
+
+        ApiException erro = assertThrows(ApiException.class, () -> barbeariaService.alterarPublicacao(true));
+
+        assertEquals(422, erro.getStatus().value());
+        assertEquals("O portal ainda não pode ficar público.", erro.getMessage());
+        assertEquals(2, erro.getProblemas().size());
+        assertFalse(b.isPublico());
+        verifyNoInteractions(auditoriaService);
+    }
+
+    @Test
+    void publicarComTudoCertoColocaOPortalNoArERegistraAuditoria() {
+        Barbearia b = logarComoDonoDe(barbearia(false));
+        Servico corte = servico(b, "Corte");
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        gabriel.getServicos().add(corte);
+        when(servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId())).thenReturn(List.of(corte));
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(gabriel));
+
+        assertTrue(barbeariaService.alterarPublicacao(true));
+
+        assertTrue(b.isPublico());
+        verify(auditoriaService).registrar(eq(AcaoAuditoria.PORTAL_PUBLICADO), any());
+    }
+
+    @Test
+    void ocultarNaoPrecisaDaRegraERegistraAuditoria() {
+        Barbearia b = logarComoDonoDe(barbearia(true));
+
+        assertFalse(barbeariaService.alterarPublicacao(false));
+
+        assertFalse(b.isPublico());
+        verify(auditoriaService).registrar(eq(AcaoAuditoria.PORTAL_OCULTADO), any());
+        verifyNoInteractions(servicoRepository);
+    }
+
+    @Test
+    void ocultarPortalQueJaEstaOcultoNaoRegistraNada() {
+        logarComoDonoDe(barbearia(false));
+
+        assertFalse(barbeariaService.alterarPublicacao(false));
+
+        verifyNoInteractions(auditoriaService);
+    }
+
     // ---------- métodos de apoio ----------
+
+    private Servico servico(Barbearia b, String nome) {
+        Servico s = new Servico();
+        s.setId(UUID.randomUUID());
+        s.setBarbearia(b);
+        s.setNome(nome);
+        return s;
+    }
 
     private Barbearia barbearia(boolean publico) {
         Barbearia b = new Barbearia();
