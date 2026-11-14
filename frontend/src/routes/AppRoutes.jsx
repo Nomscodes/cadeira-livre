@@ -68,8 +68,8 @@ export default function AppRoutes() {
           </Route>
         </Route>
 
-        {/* funcionario (so na barra do prototipo; sai na limpeza da integracao) */}
-        <Route element={<RequireStaff role="funcionario" />}>
+        {/* funcionario */}
+        <Route element={<RequireStaff role="FUNCIONARIO" />}>
           <Route path="/agenda" element={<AgendaPage />} />
         </Route>
 
