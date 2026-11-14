@@ -4,7 +4,7 @@ import { store } from '../lib/storage'
 
 const ClienteCtx = createContext(null)
 
-/** Acesso temporario do cliente final (codigo enviado por WhatsApp ou e-mail, sem senha). */
+/** Sessao do cliente final (papel CLIENTE no backend): conta com e-mail e senha. */
 export function ClienteProvider({ children }) {
   const [session, setSession] = useState(() => store.get(STORAGE_KEYS.cliente))
 
@@ -22,15 +22,28 @@ export function ClienteProvider({ children }) {
 
   const value = useMemo(() => ({
     autenticado: !!session,
-    contato: session?.contato || null,
-    enviarCodigo: (canal, contato) => api.post('/acesso/codigo', { canal, contato }),
-    async confirmar(contato, codigo) {
-      const s = await api.post('/acesso/confirmar', { contato, codigo })
+    usuario: session?.usuario || null,
+    async entrar(dados) {
+      const s = await api.post('/auth/login', dados)
+      // o login e o mesmo para dono e cliente; esta tela e so do cliente
+      if (s.usuario.papel !== 'CLIENTE') throw new Error('Esta conta é de dono de barbearia. Entre pela tela de login do painel.')
       persist(s)
     },
-    sair: () => persist(null),
+    async cadastrar(dados) {
+      const s = await api.post('/auth/cadastro/cliente', dados)
+      persist(s)
+    },
+    /** Encerra a sessao no backend (RF05) e limpa a do navegador, mesmo se o servidor nao responder. */
+    async sair() {
+      try {
+        await api.post('/auth/logout', undefined, { as: 'cliente' })
+      } catch {
+        /* sessao ja encerrada ou servidor fora do ar: sai do mesmo jeito */
+      }
+      persist(null)
+    },
     /** So para a barra de prototipo (modo simulado): entra direto com o cliente de demonstracao. */
-    demoEntrar: () => persist({ token: 'mock.cliente.62955550000', contato: '62955550000' }),
+    demoEntrar: () => persist({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }),
   }), [session, persist])
 
   return <ClienteCtx.Provider value={value}>{children}</ClienteCtx.Provider>
