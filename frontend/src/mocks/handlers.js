@@ -14,9 +14,12 @@ const salaoPorSlug = (slug) => db().saloes.find((s) => s.slug === slug)
 const salaoDoStaff = (u) => db().saloes.find((s) => s.id === u.salaoId)
 const nomeProf = (p) => p?.nomeSocial || p?.nome || ''
 
+// papel guardado no banco simulado -> papel que o backend devolve na sessao
+const PAPEL_DA_SESSAO = { administrador: 'DONO', funcionario: 'FUNCIONARIO' }
+
 /** Sessao no mesmo formato do backend: { token, usuario: { id, nome, papel, barbeariaId } }. */
-function sessaoDono(u) {
-  return { token: `mock.staff.${u.id}`, usuario: { id: u.id, nome: u.nome, papel: 'DONO', barbeariaId: u.salaoId } }
+function sessaoEquipe(u) {
+  return { token: `mock.staff.${u.id}`, usuario: { id: u.id, nome: u.nome, papel: PAPEL_DA_SESSAO[u.papel], barbeariaId: u.salaoId } }
 }
 function sessaoCliente(c) {
   return { token: `mock.cliente.${c.telefone}`, usuario: { id: c.id, nome: c.nome, papel: 'CLIENTE', barbeariaId: null } }
@@ -29,9 +32,9 @@ const emailEmUso = (email) => db().usuarios.some((u) => norm(u.email) === email)
    ========================================================= */
 route('POST', '/auth/login', ({ body }) => {
   const id = norm(body.email).trim()
-  // no backend so o dono e o cliente tem login; o funcionario existe so na barra do prototipo
-  const dono = db().usuarios.find((x) => x.papel === 'administrador' && (norm(x.email) === id || x.apelidos?.includes(id)))
-  if (dono && dono.senha === body.senha) return sessaoDono(dono)
+  // dono e funcionario entram pela mesma tela; o papel vem do cadastro da conta, nunca do formulario
+  const equipe = db().usuarios.find((x) => norm(x.email) === id || x.apelidos?.includes(id))
+  if (equipe && equipe.senha === body.senha) return sessaoEquipe(equipe)
   const cliente = db().clientes.find((x) => norm(x.email) === id)
   if (cliente && cliente.senha === body.senha) return sessaoCliente(cliente)
   throw new ApiError(401, 'E-mail ou senha incorretos.')
@@ -62,7 +65,7 @@ route('POST', '/auth/cadastro', ({ body }) => {
   const u = { id: nextId('u'), nome: body.nome, email, apelidos: [], senha: body.senha, papel: 'administrador', salaoId }
   db().usuarios.push(u)
   save()
-  return sessaoDono(u)
+  return sessaoEquipe(u)
 })
 
 route('POST', '/auth/cadastro/cliente', ({ body }) => {
