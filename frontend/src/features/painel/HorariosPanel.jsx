@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '../../lib/http'
 import { useAsync } from '../../lib/hooks'
 import { MESES, formatDateBR, monthKey, resumoHorarios, shiftMonth, todayISO, weekdayOf } from '../../lib/dates'
+import { grupoDoStatus } from '../../lib/status'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import Calendar from '../../components/ui/Calendar'
@@ -90,7 +91,8 @@ export default function HorariosPanel({ agendamentos }) {
     } catch (e) { toast.error(e.message) } finally { setSalvando(false) }
   }
 
-  const contarAgendamentos = (iso) => (agendamentos || []).filter((a) => a.data === iso && a.status === 'confirmado' && (ehSalao || a.profissionalIds?.includes(alvo))).length
+  // conta os que ainda vão acontecer (pendentes e aprovados do backend, ou 'confirmado' da API simulada)
+  const contarAgendamentos = (iso) => (agendamentos || []).filter((a) => a.data === iso && grupoDoStatus(a.status) === 'confirmado' && (ehSalao || a.profissionalIds?.includes(alvo))).length
 
   const getDay = (iso) => {
     if (iso < todayISO()) return { state: 'disabled' }
