@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
 import { resetMock } from '../mocks/db'
+import { api } from '../lib/http'
 
 const abrir = (url) => {
   window.history.pushState({}, '', url)
@@ -44,26 +45,15 @@ describe('tema do salao', () => {
 })
 
 describe('login', () => {
-  it('administrador entra e ve o painel; funcionario cai na agenda', async () => {
+  it('dono entra e ve o painel', async () => {
     const user = userEvent.setup()
-    const v = abrir('/login')
+    abrir('/login')
     expect(await screen.findByLabelText('e-mail')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Administrador')).not.toBeInTheDocument() // o cargo e reconhecido pelo login
-    expect(screen.queryByLabelText('Funcionário')).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('e-mail'), 'admin')
     await user.type(screen.getByLabelText('senha'), 'admin')
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
     expect(await screen.findByRole('heading', { name: 'Meu portal' }, espera)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/painel')
-    v.unmount()
-    window.localStorage.clear()
-
-    abrir('/login')
-    await user.type(await screen.findByLabelText('e-mail'), 'func')
-    await user.type(screen.getByLabelText('senha'), 'func')
-    await user.click(screen.getByRole('button', { name: 'Entrar' }))
-    expect(await screen.findByRole('heading', { name: /Minha agenda/, level: 1 }, espera)).toBeInTheDocument()
-    expect(window.location.pathname).toBe('/agenda')
   })
   it('mostra erro com senha errada', async () => {
     const user = userEvent.setup()
@@ -73,37 +63,96 @@ describe('login', () => {
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
     expect(await screen.findByRole('alert', {}, espera)).toHaveTextContent(/incorretos/)
   })
+  it('cliente que tenta entrar pelo painel e avisado para usar a area do cliente', async () => {
+    const user = userEvent.setup()
+    abrir('/login')
+    await user.type(await screen.findByLabelText('e-mail'), 'cliente@teste.com')
+    await user.type(screen.getByLabelText('senha'), '12345678')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('alert', {}, espera)).toHaveTextContent(/Esta conta é de cliente/)
+    expect(window.location.pathname).toBe('/login')
+  })
   it('cadastro valida campos antes de enviar', async () => {
     const user = userEvent.setup()
     abrir('/login?aba=cadastro')
+    expect(screen.queryByText('como você atua')).not.toBeInTheDocument() // o backend nao tem esse dado
     await user.click(await screen.findByRole('button', { name: 'Criar conta' }))
     expect(await screen.findByText('Informe nome e sobrenome.')).toBeInTheDocument()
     expect(screen.getByText('Aceite os termos para criar a conta.')).toBeInTheDocument()
+  })
+  it('cadastro do dono cria a barbearia e abre o painel', async () => {
+    const user = userEvent.setup()
+    abrir('/login?aba=cadastro')
+    await user.type(await screen.findByLabelText(/nome completo/), 'Gabriel Naoki')
+    await user.type(screen.getByLabelText(/razão social/), 'Barbearia Naoki')
+    await user.type(screen.getByLabelText(/CNPJ ou CPF/), '12345678901')
+    await user.type(screen.getByLabelText(/^e-mail/), 'naoki@teste.com')
+    await user.type(screen.getByLabelText(/^senha/), '12345678')
+    await user.type(screen.getByLabelText(/confirmação de senha/), '12345678')
+    await user.click(screen.getByLabelText(/li e aceito os termos/))
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/painel'), espera)
+    expect(JSON.parse(window.localStorage.getItem('cl:staff')).usuario).toMatchObject({ nome: 'Gabriel Naoki', papel: 'DONO' })
   })
   it('rotas protegidas redirecionam para o login', async () => {
     abrir('/painel')
     expect(await screen.findByRole('tab', { name: /entrar/i }, espera)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/login')
   })
+  it('sair do painel encerra a sessao e volta ao login', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('cl:staff', JSON.stringify(await api.post('/auth/login', { email: 'admin', senha: 'admin' })))
+    abrir('/painel')
+    await user.click(await screen.findByRole('button', { name: 'sair' }, espera))
+    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sair' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'), espera)
+    expect(window.localStorage.getItem('cl:staff')).toBeNull()
+  })
 })
 
-describe('acesso do cliente e busca', () => {
-  it('codigo errado e certo, depois lista saloes', async () => {
+describe('area do cliente', () => {
+  it('senha errada e certa, depois lista saloes', async () => {
     const user = userEvent.setup()
     abrir('/buscar')
-    expect(await screen.findByRole('heading', { name: 'Acesso temporário' }, espera)).toBeInTheDocument()
-    await user.type(screen.getByLabelText('seu contato'), '62999990000')
-    await user.click(screen.getByRole('button', { name: 'Enviar código' }))
-    await user.type(await screen.findByLabelText('código recebido', {}, espera), '000000')
-    await user.click(screen.getByRole('button', { name: 'Confirmar código' }))
-    expect(await screen.findByText(/Código incorreto/, {}, espera)).toBeInTheDocument()
-    await user.clear(screen.getByLabelText('código recebido'))
-    await user.type(screen.getByLabelText('código recebido'), '123456')
-    await user.click(screen.getByRole('button', { name: 'Confirmar código' }))
+    expect(await screen.findByRole('heading', { name: 'Área do cliente' }, espera)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/acesso')
+    await user.type(screen.getByLabelText('e-mail'), 'cliente@teste.com')
+    await user.type(screen.getByLabelText('senha'), 'errada')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('alert', {}, espera)).toHaveTextContent(/incorretos/)
+    await user.clear(screen.getByLabelText('senha'))
+    await user.type(screen.getByLabelText('senha'), '12345678')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
     expect(await screen.findByRole('heading', { name: 'Encontre seu salão' }, espera)).toBeInTheDocument()
     expect(await screen.findByText('Barbearia do Rafael', {}, espera)).toBeInTheDocument()
     expect(screen.getByText('Studio Juliana Matos')).toBeInTheDocument()
     expect(screen.queryByText('Diego Santos Barber')).not.toBeInTheDocument() // outra cidade
+  })
+  it('dono que tenta entrar pela area do cliente e avisado', async () => {
+    const user = userEvent.setup()
+    abrir('/acesso')
+    await user.type(await screen.findByLabelText('e-mail'), 'admin')
+    await user.type(screen.getByLabelText('senha'), 'admin')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByRole('alert', {}, espera)).toHaveTextContent(/Esta conta é de dono de barbearia/)
+  })
+  it('cria a conta com nome, e-mail, telefone e senha e ja entra', async () => {
+    const user = userEvent.setup()
+    abrir('/acesso')
+    await user.click(await screen.findByRole('tab', { name: 'Criar conta' }))
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }))
+    expect(await screen.findByText('Informe o telefone com DDD.')).toBeInTheDocument()
+    expect(screen.getByText('Aceite os termos para criar a conta.')).toBeInTheDocument()
+    await user.type(screen.getByLabelText(/^nome/), 'Ana Souza')
+    await user.type(screen.getByLabelText(/^e-mail/), 'ana@teste.com')
+    await user.type(screen.getByLabelText(/^telefone/), '62988887777')
+    expect(screen.getByLabelText(/^telefone/)).toHaveValue('(62) 98888-7777')
+    await user.type(screen.getByLabelText(/^senha/), '12345678')
+    await user.type(screen.getByLabelText(/confirmação de senha/), '12345678')
+    await user.click(screen.getByLabelText(/li e aceito os termos/))
+    await user.click(screen.getByRole('button', { name: 'Criar conta' }))
+    expect(await screen.findByRole('heading', { name: 'Encontre seu salão' }, espera)).toBeInTheDocument()
+    expect(JSON.parse(window.localStorage.getItem('cl:cliente')).usuario).toMatchObject({ nome: 'Ana Souza', papel: 'CLIENTE' })
   })
 })
 
@@ -156,7 +205,7 @@ describe('agendamento completo', () => {
 
 describe('painel do responsavel', () => {
   const entrarAdmin = async () => {
-    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }))
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
   }
   it('mostra o seletor com 14 cores e troca a previa', async () => {
     const user = userEvent.setup()
@@ -304,7 +353,7 @@ describe('agenda do funcionario', () => {
 describe('historico do cliente', () => {
   it('lista, oculta cancelados e abre avaliacao com tesouras', async () => {
     const user = userEvent.setup()
-    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', contato: '62955550000' }))
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
     abrir('/meus-agendamentos')
     expect(await screen.findByRole('heading', { name: 'Meus agendamentos' }, espera)).toBeInTheDocument()
     expect(await screen.findByText('Combo Corte + Barba', {}, espera)).toBeInTheDocument()
@@ -321,24 +370,21 @@ describe('historico do cliente', () => {
   })
 })
 
-describe('login reconhece o cargo', () => {
-  it('a mesma tela leva o administrador ao painel e o funcionario a agenda', async () => {
+describe('sair da area do cliente', () => {
+  it('encerra a sessao e volta para a area do cliente', async () => {
     const user = userEvent.setup()
-    for (const [login, destino] of [['admin', '/painel'], ['func', '/agenda']]) {
-      window.localStorage.clear()
-      const v = abrir('/login')
-      await user.type(await screen.findByLabelText('e-mail'), login)
-      await user.type(screen.getByLabelText('senha', { exact: true }), login)
-      await user.click(screen.getByRole('button', { name: 'Entrar' }))
-      await waitFor(() => expect(window.location.pathname).toBe(destino), espera)
-      v.unmount()
-    }
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
+    abrir('/meus-agendamentos')
+    await user.click(await screen.findByRole('button', { name: 'sair' }, espera))
+    expect(await screen.findByRole('heading', { name: 'Área do cliente' }, espera)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/acesso')
+    expect(window.localStorage.getItem('cl:cliente')).toBeNull()
   })
 })
 
 describe('configuracoes: campo de antecedencia', () => {
   it('e compacto e explica a unidade ao lado', async () => {
-    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }))
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
     abrir('/painel/configuracoes')
     const campo = await screen.findByLabelText('antecedência mínima para o cliente cancelar', {}, espera)
     expect(campo).toHaveClass('input-xs')
@@ -349,7 +395,7 @@ describe('configuracoes: campo de antecedencia', () => {
 
 describe('capa do portal', () => {
   it('a imagem de capa aparece ao redor do botao de agendar', async () => {
-    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }))
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
     const { api } = await import('../lib/http')
     const portal = await api.get('/painel/portal', { as: 'staff' })
     await api.put('/painel/portal', { ...portal, capa: 'data:image/png;base64,AAAA' }, { as: 'staff' })
@@ -365,7 +411,7 @@ describe('capa do portal', () => {
     expect(botao.closest('.hero')).not.toHaveClass('com-capa')
   })
   it('o painel oferece o envio da capa', async () => {
-    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }))
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
     abrir('/painel')
     expect(await screen.findByText(/imagem de capa do portal/, {}, espera)).toBeInTheDocument()
     expect(screen.getByText('Clique para enviar a imagem de capa')).toBeInTheDocument()
@@ -393,7 +439,7 @@ describe('saiba mais em grade', () => {
 
 describe('notificacoes abrem em modal', () => {
   const entrarComo = (tipo) => window.localStorage.setItem('cl:staff', JSON.stringify(tipo === 'adm'
-    ? { token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }
+    ? { token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }
     : { token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'funcionario', salaoId: 's1', profissionalId: 'p1' } }))
 
   it('o painel do sino so lista; clicar abre o modal da notificacao e marca como lida', async () => {
@@ -445,7 +491,7 @@ describe('notificacoes abrem em modal', () => {
 })
 
 describe('calendario e horarios do administrador', () => {
-  const entrar = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }))
+  const entrar = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
 
   it('a pagina de agendamentos tem a aba de calendario e horarios', async () => {
     const user = userEvent.setup()
@@ -517,7 +563,7 @@ describe('atalho somente teste na agenda do funcionario', () => {
 })
 
 describe('administrador que nao atende clientes', () => {
-  const entrar = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }))
+  const entrar = () => window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
 
   it('o responsavel pode se tirar da lista de quem atende, e isso aparece na equipe e nos horarios', async () => {
     const user = userEvent.setup()
@@ -556,7 +602,7 @@ describe('administrador que nao atende clientes', () => {
 describe('sino recebe os eventos do sistema', () => {
   it('um novo agendamento do cliente aparece como notificacao e abre em modal', async () => {
     const user = userEvent.setup()
-    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'administrador', salaoId: 's1', profissionalId: 'p1' } }))
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
     const { api } = await import('../lib/http')
     const { addDaysISO, todayISO, weekdayOf } = await import('../lib/dates')
     let data = addDaysISO(todayISO(), 12)
@@ -573,7 +619,7 @@ describe('sino recebe os eventos do sistema', () => {
 })
 
 describe('sino do cliente', () => {
-  const entrarComoCliente = () => window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', contato: '62955550000' }))
+  const entrarComoCliente = () => window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
 
   it('na busca fica ao lado de meus agendamentos; o convite para avaliar leva a avaliacao', async () => {
     const user = userEvent.setup()
