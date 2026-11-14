@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
@@ -36,7 +37,10 @@ import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.horario.HorarioFuncionamento;
 import br.com.cadeiralivre.api.horario.HorarioFuncionamentoRepository;
 import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorario;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorarioRepository;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
+import br.com.cadeiralivre.api.servico.ComboRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
@@ -58,6 +62,12 @@ class BarbeariaServiceTest {
 
     @Mock
     private HorarioFuncionamentoRepository horarioRepository;
+
+    @Mock
+    private ProfissionalHorarioRepository profissionalHorarioRepository;
+
+    @Mock
+    private ComboRepository comboRepository;
 
     @Mock
     private AuditoriaService auditoriaService;
@@ -102,9 +112,77 @@ class BarbeariaServiceTest {
         PortalPublicoResponse portal = barbeariaService.portalPublico("barbearia-naoki");
 
         assertFalse(portal.publico());
-        assertNull(portal.logoUrl());
+        assertEquals("Barbearia Naoki", portal.nome());
+        assertEquals("vermelho-escuro", portal.temaId());
+        assertNull(portal.logo());
         assertTrue(portal.servicos().isEmpty());
         verifyNoInteractions(servicoRepository);
+    }
+
+    @Test
+    void portalPublicadoMostraSoQuemAtendeNosServicosECombos() {
+        Barbearia b = barbearia(true);
+        b.setTelefone("62999990000");
+        when(barbeariaRepository.findBySlug("barbearia-naoki")).thenReturn(Optional.of(b));
+        Servico corte = new Servico();
+        corte.setId(UUID.randomUUID());
+        corte.setNome("Corte");
+        corte.setPreco(new BigDecimal("40.00"));
+        corte.setDuracaoMinutos(30);
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        gabriel.setNomeSocial("Gabriel");
+        Profissional soGerencia = profissional(b, "Dono do Salão", true);
+        soGerencia.setAtende(false);
+        gabriel.getServicos().add(corte);
+        corte.getProfissionais().add(gabriel);
+        soGerencia.getServicos().add(corte);
+        corte.getProfissionais().add(soGerencia);
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(soGerencia, gabriel));
+        when(servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId())).thenReturn(List.of(corte));
+        when(profissionalHorarioRepository.findAllByProfissionalBarbeariaId(b.getId())).thenReturn(List.of(
+                new ProfissionalHorario(gabriel, DayOfWeek.MONDAY, LocalTime.of(9, 0), LocalTime.of(18, 0), true)));
+
+        PortalPublicoResponse portal = barbeariaService.portalPublico("barbearia-naoki");
+
+        assertTrue(portal.publico());
+        assertEquals("62999990000", portal.whatsapp());
+        assertEquals(List.of(gabriel.getId()), portal.servicos().get(0).profissionalIds()); // quem só gerencia sai
+        assertEquals(1, portal.profissionais().size());
+        PortalPublicoResponse.ProfissionalDoPortal p = portal.profissionais().get(0);
+        assertEquals("Gabriel", p.nome()); // o cliente vê o nome social
+        assertEquals(List.of(corte.getId()), p.servicoIds());
+        assertTrue(p.horarios().get("1").ativo());
+        assertEquals(7, portal.horarios().size());
+    }
+
+    // ---------- busca de salões ----------
+
+    @Test
+    void buscaPelaCidadeComparaOComecoSemAcento() {
+        Barbearia goiania = publicada("Barbearia Naoki", "Goiânia, GO", "barbearia");
+        Barbearia aparecida = publicada("Naoki Aparecida", "Aparecida de Goiânia, GO", "barbearia");
+        when(barbeariaRepository.findAllByPublicoTrueOrderByNomeFantasia()).thenReturn(List.of(goiania, aparecida));
+
+        List<PortalPublicoResponse.SalaoDaBusca> achados = barbeariaService.buscar("goiania", null, null, null);
+
+        assertEquals(List.of("Barbearia Naoki"), achados.stream().map(PortalPublicoResponse.SalaoDaBusca::nome).toList());
+        assertEquals(2, barbeariaService.buscar(null, "todas", null, null).size()); // sem filtro
+        assertEquals(1, barbeariaService.buscar("GOI", null, null, null).size());
+    }
+
+    @Test
+    void buscaFiltraPorCategoriaENomeEServico() {
+        Barbearia barbearia = publicada("Barbearia Naoki", "Goiânia, GO", "barbearia");
+        Barbearia unhas = publicada("Espaço Unhas", "Goiânia, GO", "unhas");
+        when(barbeariaRepository.findAllByPublicoTrueOrderByNomeFantasia()).thenReturn(List.of(barbearia, unhas));
+        Servico manicure = new Servico();
+        manicure.setNome("Manicure");
+        when(servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(barbearia.getId())).thenReturn(List.of());
+        when(servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(unhas.getId())).thenReturn(List.of(manicure));
+
+        assertEquals("Espaço Unhas", barbeariaService.buscar(null, "unhas", null, null).get(0).nome());
+        assertEquals("Barbearia Naoki", barbeariaService.buscar(null, null, null, "naoki").get(0).nome());
+        assertEquals("Espaço Unhas", barbeariaService.buscar(null, null, "MANIC", null).get(0).nome());
     }
 
     @Test
@@ -333,6 +411,14 @@ class BarbeariaServiceTest {
     }
 
     // ---------- métodos de apoio ----------
+
+    private Barbearia publicada(String nome, String cidade, String categoria) {
+        Barbearia b = barbearia(true);
+        b.setNomeFantasia(nome);
+        b.setCidade(cidade);
+        b.setCategoria(categoria);
+        return b;
+    }
 
     private Servico servico(Barbearia b, String nome) {
         Servico s = new Servico();

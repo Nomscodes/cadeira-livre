@@ -1,5 +1,6 @@
 package br.com.cadeiralivre.api.barbearia;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -10,4 +11,7 @@ public interface BarbeariaRepository extends JpaRepository<Barbearia, UUID> {
     Optional<Barbearia> findBySlug(String slug);
 
     boolean existsBySlug(String slug);
+
+    // só os portais publicados aparecem na busca de salões
+    List<Barbearia> findAllByPublicoTrueOrderByNomeFantasia();
 }

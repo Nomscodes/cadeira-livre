@@ -1,7 +1,9 @@
 package br.com.cadeiralivre.api.barbearia;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -17,10 +19,15 @@ import br.com.cadeiralivre.api.barbearia.dto.PortalResponse;
 import br.com.cadeiralivre.api.common.Slugs;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.horario.HorarioFuncionamentoRepository;
+import br.com.cadeiralivre.api.horario.dto.HorariosDoPainelResponse;
 import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorario;
+import br.com.cadeiralivre.api.profissional.ProfissionalHorarioRepository;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
+import br.com.cadeiralivre.api.servico.ComboRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
+import br.com.cadeiralivre.api.servico.dto.ComboResponse;
 import br.com.cadeiralivre.api.servico.dto.ServicoResponse;
 import br.com.cadeiralivre.api.tenant.TenantContext;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +42,8 @@ public class BarbeariaService {
     private final ServicoRepository servicoRepository;
     private final ProfissionalRepository profissionalRepository;
     private final HorarioFuncionamentoRepository horarioRepository;
+    private final ProfissionalHorarioRepository profissionalHorarioRepository;
+    private final ComboRepository comboRepository;
     private final AuditoriaService auditoriaService;
 
     /** Chamado no cadastro do dono. Nasce oculta (publico = false) até o dono publicar. */
@@ -54,10 +63,67 @@ public class BarbeariaService {
                 .orElseThrow(() -> ApiException.naoEncontrado("Esta página não existe."));
         if (!b.isPublico()) return PortalPublicoResponse.oculto(b);
 
-        List<ServicoResponse> servicos = servicoRepository
-                .findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId())
-                .stream().map(ServicoResponse::de).toList();
-        return PortalPublicoResponse.de(b, servicos);
+        // o cliente só vê quem atende: os outros saem da lista e dos serviços e combos
+        List<Profissional> queAtendem = profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId()).stream()
+                .filter(p -> p.isAtivo() && p.isAtende()).toList();
+        Set<UUID> idsQueAtendem = queAtendem.stream().map(Profissional::getId).collect(Collectors.toSet());
+        Map<UUID, List<ProfissionalHorario>> horarios = profissionalHorarioRepository
+                .findAllByProfissionalBarbeariaId(b.getId()).stream()
+                .collect(Collectors.groupingBy(h -> h.getProfissional().getId()));
+
+        List<ServicoResponse> servicos = servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId()).stream()
+                .map(ServicoResponse::de)
+                .map(s -> new ServicoResponse(s.id(), s.nome(), s.descricao(), s.preco(), s.duracao(),
+                        s.profissionalIds().stream().filter(idsQueAtendem::contains).toList(), s.destaque()))
+                .toList();
+        List<ComboResponse> combos = comboRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId()).stream()
+                .map(ComboResponse::de)
+                .map(c -> new ComboResponse(c.id(), c.nome(), c.servicoIds(), c.preco(), c.duracao(),
+                        c.profissionalIds().stream().filter(idsQueAtendem::contains).toList()))
+                .toList();
+        List<PortalPublicoResponse.ProfissionalDoPortal> profissionais = queAtendem.stream()
+                .map(p -> new PortalPublicoResponse.ProfissionalDoPortal(p.getId(),
+                        p.getNomeSocial() != null ? p.getNomeSocial() : p.getNome(),
+                        p.getServicos().stream().filter(Servico::isAtivo).map(Servico::getId).toList(),
+                        HorariosDoPainelResponse.semanaDoProfissional(horarios.getOrDefault(p.getId(), List.of()))))
+                .toList();
+
+        return PortalPublicoResponse.de(b,
+                fotoRepository.findAllByBarbeariaIdOrderByOrdem(b.getId()).stream().map(BarbeariaFoto::getImagem).toList(),
+                HorariosDoPainelResponse.semanaDoSalao(horarioRepository.findAllByBarbeariaId(b.getId())),
+                servicos, combos, profissionais);
+    }
+
+    /**
+     * Busca de salões publicados (tela "Encontre seu salão"). A cidade compara o começo do nome, sem acento
+     * ("goi" acha Goiânia, mas "goiania" não acha "Aparecida de Goiânia"); a categoria "todas" não filtra;
+     * o serviço e o nome procuram o texto em qualquer parte.
+     */
+    @Transactional(readOnly = true)
+    public List<PortalPublicoResponse.SalaoDaBusca> buscar(String cidade, String categoria, String servico, String nome) {
+        String cidadeBuscada = semAcento(antesDaVirgula(cidade));
+        String servicoBuscado = semAcento(servico);
+        String nomeBuscado = semAcento(nome);
+        boolean filtraCategoria = categoria != null && !categoria.isBlank() && !"todas".equals(categoria);
+
+        return barbeariaRepository.findAllByPublicoTrueOrderByNomeFantasia().stream()
+                .filter(b -> semAcento(antesDaVirgula(b.getCidade())).startsWith(cidadeBuscada))
+                .filter(b -> !filtraCategoria || categoria.equals(b.getCategoria()))
+                .filter(b -> semAcento(b.getNomeFantasia()).contains(nomeBuscado))
+                .filter(b -> servicoBuscado.isEmpty() || servicoRepository.findAllByBarbeariaIdAndAtivoTrueOrderByNome(b.getId())
+                        .stream().anyMatch(s -> semAcento(s.getNome()).contains(servicoBuscado)))
+                .map(PortalPublicoResponse.SalaoDaBusca::de)
+                .toList();
+    }
+
+    // "Goiânia, GO" -> "goiania"
+    private String antesDaVirgula(String texto) {
+        return texto == null ? "" : texto.split(",")[0];
+    }
+
+    private String semAcento(String texto) {
+        if (texto == null) return "";
+        return Normalizer.normalize(texto, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase().trim();
     }
 
     /** Tudo o que a tela "Meu portal" do painel mostra. */
