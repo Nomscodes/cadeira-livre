@@ -33,9 +33,9 @@ describe('barra de prototipo', () => {
     await user.click(screen.getByRole('button', { name: 'Meu portal' }))
     expect(estado()).toBe('/painel|DONO|-')
     await user.click(screen.getByRole('button', { name: 'Minha agenda' }))
-    expect(estado()).toBe('/agenda|funcionario|-')
+    expect(estado()).toBe('/agenda|FUNCIONARIO|-')
     await user.click(screen.getByRole('button', { name: 'Histórico' }))
-    expect(estado()).toBe('/meus-agendamentos|funcionario|cliente')
+    expect(estado()).toBe('/meus-agendamentos|FUNCIONARIO|cliente')
     // sair chama o logout da API antes de limpar a sessao, por isso espera
     await user.click(screen.getByRole('button', { name: 'Login/Cadastro' }))
     await waitFor(() => expect(estado()).toBe('/login|-|cliente'))
