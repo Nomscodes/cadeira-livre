@@ -9,9 +9,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface NotificacaoRepository extends JpaRepository<Notificacao, UUID> {
 
-    // as 30 mais recentes, já com os dados do agendamento usados no texto
+    // as 30 mais recentes do dono (sem os avisos mandados para os profissionais), já com os dados do agendamento
     @EntityGraph(attributePaths = {"agendamento", "agendamento.servico", "agendamento.profissional", "agendamento.barbearia"})
-    List<Notificacao> findTop30ByBarbeariaIdOrderByCriadaEmDesc(UUID barbeariaId);
+    List<Notificacao> findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(UUID barbeariaId);
 
     @EntityGraph(attributePaths = {"agendamento", "agendamento.servico", "agendamento.profissional", "agendamento.barbearia"})
     List<Notificacao> findTop30ByClienteIdOrderByCriadaEmDesc(UUID clienteId);

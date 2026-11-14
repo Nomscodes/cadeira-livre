@@ -134,7 +134,7 @@ class NotificacaoServiceTest {
     @Test
     void sinoDoDonoMostraOPedidoComOsDadosDoAgendamento() {
         TenantContext.set(barbearia.getId());
-        when(notificacaoRepository.findTop30ByBarbeariaIdOrderByCriadaEmDesc(barbearia.getId()))
+        when(notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(barbearia.getId()))
                 .thenReturn(List.of(notificacao(TipoNotificacao.NOVO_AGENDAMENTO)));
 
         NotificacaoResponse n = notificacaoService.listarDoDono().get(0);
@@ -159,7 +159,7 @@ class NotificacaoServiceTest {
     @Test
     void lembreteDoDonoMostraOClienteEOHorario() {
         TenantContext.set(barbearia.getId());
-        when(notificacaoRepository.findTop30ByBarbeariaIdOrderByCriadaEmDesc(barbearia.getId()))
+        when(notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(barbearia.getId()))
                 .thenReturn(List.of(notificacao(TipoNotificacao.LEMBRETE_DONO)));
 
         NotificacaoResponse n = notificacaoService.listarDoDono().get(0);
@@ -181,11 +181,26 @@ class NotificacaoServiceTest {
     }
 
     @Test
+    void alertaDoFuncionarioMostraOTextoQueEleEscreveu() {
+        Notificacao alerta = notificacao(TipoNotificacao.ALERTA_FUNCIONARIO);
+        alerta.setTexto("Cliente avisou que vai atrasar 15 minutos.");
+        alerta.setRemetente("Diego Santos");
+        TenantContext.set(barbearia.getId());
+        when(notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(barbearia.getId()))
+                .thenReturn(List.of(alerta));
+
+        NotificacaoResponse n = notificacaoService.listarDoDono().get(0);
+
+        assertEquals("Alerta de funcionário", n.titulo());
+        assertEquals("Cliente avisou que vai atrasar 15 minutos.", n.texto());
+    }
+
+    @Test
     void clienteQueExcluiuAContaApareceComoClienteRemovido() {
         // depois da exclusão da conta (PR16) o agendamento fica sem o nome; o texto acompanha (LGPD)
         agendamento.setClienteNome("Cliente removido");
         TenantContext.set(barbearia.getId());
-        when(notificacaoRepository.findTop30ByBarbeariaIdOrderByCriadaEmDesc(barbearia.getId()))
+        when(notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(barbearia.getId()))
                 .thenReturn(List.of(notificacao(TipoNotificacao.CANCELAMENTO)));
 
         NotificacaoResponse n = notificacaoService.listarDoDono().get(0);

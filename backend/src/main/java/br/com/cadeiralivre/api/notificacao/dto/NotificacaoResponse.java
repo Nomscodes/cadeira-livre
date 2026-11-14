@@ -38,6 +38,8 @@ public record NotificacaoResponse(UUID id, TipoNotificacao tipo, String titulo, 
             case HORARIO_RECUSADO -> "A barbearia não pôde aceitar seu " + servico
                     + " em " + dia + " às " + hora + ". Escolha outro horário.";
             case ATENDIMENTO_CONCLUIDO -> "Seu " + servico + " com " + profissional + " foi concluído. Toque para avaliar.";
+            // aviso do dono e alerta do funcionário: o texto foi escrito por quem mandou
+            case AVISO_EQUIPE, ALERTA_FUNCIONARIO -> n.getTexto();
             case LEMBRETE_CLIENTE -> servico + " com " + profissional + " em " + dia + " às " + hora
                     + ", na " + a.getBarbearia().getNomeFantasia() + ".";
         };

@@ -7,6 +7,9 @@ public enum TipoNotificacao {
     NOVO_AGENDAMENTO("Novo pedido de agendamento"),
     CANCELAMENTO("Agendamento cancelado"),
     LEMBRETE_DONO("Atendimento daqui a pouco"),
+    // entre a equipe (texto livre, com remetente)
+    AVISO_EQUIPE("Aviso do responsável"),
+    ALERTA_FUNCIONARIO("Alerta de funcionário"),
 
     // para o cliente
     HORARIO_APROVADO("Horário confirmado"),

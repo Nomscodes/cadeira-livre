@@ -5,6 +5,7 @@ import java.util.UUID;
 
 import br.com.cadeiralivre.api.agendamento.Agendamento;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
+import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.usuario.Cliente;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -49,6 +50,19 @@ public class Notificacao {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cliente_id")
     private Cliente cliente;
+
+    // para um profissional da equipe (aviso do dono); nesse caso o barbearia_id também fica preenchido
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "profissional_id")
+    private Profissional profissional;
+
+    // texto livre do aviso do dono ou do alerta do funcionário
+    @Column(length = 500)
+    private String texto;
+
+    // nome de quem mandou o aviso ou o alerta
+    @Column(length = 120)
+    private String remetente;
 
     @Column(name = "criada_em", nullable = false, updatable = false)
     private Instant criadaEm;
