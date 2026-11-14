@@ -24,6 +24,17 @@ public final class UsuarioLogado {
         return ehCliente ? UUID.fromString(auth.getName()) : null;
     }
 
+    /** Id de quem está logado (qualquer papel), ou null se ninguém estiver logado. */
+    public static UUID usuarioId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) return null;
+        try {
+            return UUID.fromString(auth.getName());
+        } catch (IllegalArgumentException e) {
+            return null; // usuário anônimo do Spring ("anonymousUser")
+        }
+    }
+
     /** Id da sessão do token usado na requisição (RF05), ou null se ninguém estiver logado. */
     public static UUID sessaoId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
