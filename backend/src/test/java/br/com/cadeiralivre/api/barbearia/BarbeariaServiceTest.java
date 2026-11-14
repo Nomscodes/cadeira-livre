@@ -410,6 +410,47 @@ class BarbeariaServiceTest {
         verifyNoInteractions(auditoriaService);
     }
 
+    // ---------- configurações ----------
+
+    @Test
+    void salvarConfiguracoesGuardaAtendimentoPrazoEPermissaoDosFuncionarios() {
+        Barbearia b = logarComoDonoDe(barbearia(true));
+
+        barbeariaService.salvarConfiguracoes("domicilio", 12, true);
+
+        assertEquals("domicilio", b.getAtendimento());
+        assertEquals(12, b.getCancelamentoHoras());
+        assertTrue(b.isFuncionariosEditamHorario());
+        verify(auditoriaService).registrar(eq(AcaoAuditoria.PORTAL_ALTERADO), anyString());
+    }
+
+    @Test
+    void transferirAdministradorDeixaSoOEscolhidoComoAdministrador() {
+        Barbearia b = logarComoDonoDe(barbearia(true));
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        Profissional diego = profissional(b, "Diego Santos", false);
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(diego, gabriel));
+
+        barbeariaService.transferirAdministrador(diego.getId());
+
+        assertTrue(diego.isAdministrador());
+        assertFalse(gabriel.isAdministrador());
+    }
+
+    @Test
+    void transferirParaProfissionalQueNaoEhDoSalaoDevolve404() {
+        Barbearia b = logarComoDonoDe(barbearia(true));
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(gabriel));
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> barbeariaService.transferirAdministrador(UUID.randomUUID()));
+
+        assertEquals(404, erro.getStatus().value());
+        assertTrue(gabriel.isAdministrador());
+        verifyNoInteractions(auditoriaService);
+    }
+
     // ---------- métodos de apoio ----------
 
     private Barbearia publicada(String nome, String cidade, String categoria) {
