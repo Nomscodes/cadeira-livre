@@ -16,6 +16,8 @@ import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaService;
 import br.com.cadeiralivre.api.common.cripto.Criptografia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.profissional.Profissional;
+import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.security.JwtService;
 import br.com.cadeiralivre.api.security.Sessao;
 import br.com.cadeiralivre.api.security.SessaoService;
@@ -33,6 +35,7 @@ public class AuthService {
 
     private final UsuarioRepository usuarioRepository;
     private final BarbeariaService barbeariaService;
+    private final ProfissionalRepository profissionalRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final SessaoService sessaoService;
@@ -55,7 +58,7 @@ public class AuthService {
         sessaoService.encerrar(sessaoId);
     }
 
-    /** Cria a barbearia (tenant) e o usuário dono na mesma transação. */
+    /** Cria a barbearia (tenant), o usuário dono e o profissional do dono na mesma transação. */
     @Transactional
     public SessaoResponse cadastrarDono(CadastroDonoRequest req) {
         String emailHash = hashDoEmail(req.email());
@@ -71,7 +74,20 @@ public class AuthService {
         dono.setAceiteTermosEm(Instant.now(clock));
         dono.setBarbearia(barbearia);
         usuarioRepository.save(dono);
+        criarProfissionalDoDono(dono, barbearia);
         return sessao(dono);
+    }
+
+    // o dono já entra como profissional administrador; o autônomo atende e o dono de salão com equipe só gerencia
+    private void criarProfissionalDoDono(DonoBarbearia dono, Barbearia barbearia) {
+        Profissional profissional = new Profissional();
+        profissional.setBarbearia(barbearia);
+        profissional.setUsuario(dono);
+        profissional.setNome(dono.getNome());
+        profissional.setNomeSocial(dono.getNome().split("\\s+")[0]);
+        profissional.setAtende(!"equipe".equals(barbearia.getAtuacao()));
+        profissional.setAdministrador(true);
+        profissionalRepository.save(profissional);
     }
 
     @Transactional
