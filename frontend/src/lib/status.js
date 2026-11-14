@@ -6,3 +6,15 @@ export const STATUS = {
   CANCELADO: 'CANCELADO', // cancelado pelo cliente
   CONCLUIDO: 'CONCLUIDO', // atendimento feito; libera a avaliação
 }
+
+// grupo de cada status nas telas do cliente; também aceita os nomes da API simulada (confirmado, finalizado, cancelado)
+const GRUPO = {
+  PENDENTE: 'confirmado', APROVADO: 'confirmado', CONCLUIDO: 'finalizado', CANCELADO: 'cancelado', RECUSADO: 'cancelado',
+  confirmado: 'confirmado', finalizado: 'finalizado', cancelado: 'cancelado',
+}
+
+/**
+ * Agrupa o status para a tela do cliente: 'confirmado' (ainda vai acontecer: pode cancelar),
+ * 'finalizado' (já aconteceu: pode avaliar) ou 'cancelado' (cancelado ou recusado pelo salão).
+ */
+export const grupoDoStatus = (status) => GRUPO[status] || 'confirmado'
