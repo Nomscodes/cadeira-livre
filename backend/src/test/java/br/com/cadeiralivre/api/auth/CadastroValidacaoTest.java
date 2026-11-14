@@ -30,12 +30,35 @@ class CadastroValidacaoTest {
 
     @Test
     void donoSemAceitarOsTermosNaoPodeSeCadastrar() {
-        var pedido = new CadastroDonoRequest("Dono", "Barbearia", "12345678901", "dono@teste.com", "12345678", false);
+        var pedido = new CadastroDonoRequest("Dono", "Barbearia", "12345678901", "dono@teste.com", "12345678", false, null);
 
         Set<ConstraintViolation<CadastroDonoRequest>> erros = validator.validate(pedido);
 
         assertEquals(1, erros.size());
         assertEquals("aceitouTermos", erros.iterator().next().getPropertyPath().toString());
+    }
+
+    @Test
+    void donoPodeEscolherAutonomoOuSalaoComEquipeOuNaoInformar() {
+        for (String atuacao : new String[] {"autonomo", "equipe", null}) {
+            var pedido = new CadastroDonoRequest("Gabriel Naoki", "Barbearia Naoki", "12345678901",
+                    "naoki@teste.com", "12345678", true, atuacao);
+
+            assertTrue(validator.validate(pedido).isEmpty(), "atuação " + atuacao + " deveria ser aceita");
+        }
+    }
+
+    @Test
+    void atuacaoDiferenteDeAutonomoOuEquipeEhRecusada() {
+        var pedido = new CadastroDonoRequest("Gabriel Naoki", "Barbearia Naoki", "12345678901",
+                "naoki@teste.com", "12345678", true, "sozinho");
+
+        Set<ConstraintViolation<CadastroDonoRequest>> erros = validator.validate(pedido);
+
+        assertEquals(1, erros.size());
+        ConstraintViolation<CadastroDonoRequest> erro = erros.iterator().next();
+        assertEquals("atuacao", erro.getPropertyPath().toString());
+        assertEquals("escolha autonomo ou equipe", erro.getMessage());
     }
 
     @Test
