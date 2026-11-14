@@ -10,6 +10,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -333,6 +334,52 @@ class AgendamentoServiceTest {
         verify(agendamentoRepository, never()).findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(any());
     }
 
+    @Test
+    void listaDoPainelVemNoFormatoDoFrontComQuemEncaminha() {
+        logarComoDono();
+        rafael.setNomeSocial("Rafael");
+        rafael.setEncaminhar(true);
+        rafael.setTelefone("62977776666");
+        Agendamento a = agendamentoPendente();
+        a.setClienteNome("Gabriel Naoki");
+        when(agendamentoRepository.findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(barbearia.getId())).thenReturn(List.of(a));
+
+        AgendamentoResponse r = agendamentoService.listarDoPainel(null).get(0);
+
+        assertEquals("Gabriel Naoki", r.cliente());
+        assertEquals("62999999999", r.whatsapp());
+        assertEquals("Corte", r.servicos());
+        assertEquals("Rafael", r.profissionais());
+        assertEquals(List.of(rafael.getId()), r.profissionalIds());
+        assertEquals("10:00", r.hora());
+        assertEquals(new BigDecimal("40.00"), r.valor());
+        assertEquals(StatusAgendamento.PENDENTE, r.status());
+        assertEquals(List.of(new AgendamentoResponse.Encaminhar("Rafael", "62977776666")), r.encaminhar());
+    }
+
+    @Test
+    void aprovarConfereORf21DeTodosOsProfissionaisDosItens() {
+        logarComoDono();
+        Profissional diego = new Profissional();
+        diego.setId(UUID.randomUUID());
+        diego.setNome("Diego Santos");
+        Agendamento pendente = agendamentoPendente();
+        pendente.adicionarItem(AgendamentoItem.doServico(corte, diego, 1));
+        when(agendamentoRepository.findByIdAndBarbeariaId(pendente.getId(), barbearia.getId())).thenReturn(Optional.of(pendente));
+        // a ordem é por id (sorteado no teste): o Rafael pode nem chegar a ser conferido
+        lenient().when(agendamentoRepository.existeConflito(rafael.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
+                .thenReturn(false);
+        // o Diego já está ocupado nesse horário
+        when(agendamentoRepository.existeConflito(diego.getId(), amanha, StatusAgendamento.APROVADO, dezHoras, dezEMeia))
+                .thenReturn(true);
+
+        ApiException erro = assertThrows(ApiException.class, () -> agendamentoService.aprovar(pendente.getId()));
+
+        assertEquals(409, erro.getStatus().value());
+        assertEquals(StatusAgendamento.PENDENTE, pendente.getStatus());
+        verify(profissionalRepository).buscarComTrava(diego.getId());
+    }
+
     // ---------- aprovação e recusa pelo dono (painel) ----------
 
     @Test
@@ -565,6 +612,8 @@ class AgendamentoServiceTest {
         a.setHoraInicio(dezHoras);
         a.setHoraFim(dezEMeia);
         a.setStatus(StatusAgendamento.PENDENTE);
+        a.adicionarItem(AgendamentoItem.doServico(corte, rafael, 0));
+        a.setValor(new BigDecimal("40.00"));
         return a;
     }
 }
