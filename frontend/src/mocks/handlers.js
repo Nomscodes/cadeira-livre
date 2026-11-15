@@ -74,6 +74,24 @@ route('POST', '/auth/cadastro', ({ body }) => {
   return sessaoEquipe(u)
 })
 
+/** Funcionario cria a conta com o codigo de convite (mesmo contrato do backend). O codigo so vale uma vez. */
+route('POST', '/auth/convite', ({ body }) => {
+  const codigo = String(body.codigo || '').trim().toUpperCase()
+  const email = String(body.email || '').trim().toLowerCase()
+  if (!codigo) throw new ApiError(422, 'Informe o código de convite.')
+  if (!isEmail(email)) throw new ApiError(422, 'Informe um e-mail válido.')
+  if (!body.senha || body.senha.length < 8) throw new ApiError(422, 'A senha precisa ter ao menos 8 caracteres.')
+  if (body.aceitouTermos !== true) throw new ApiError(422, 'Aceite os termos de uso e a política de privacidade.')
+  const p = db().profissionais.find((x) => x.convite === codigo && !db().usuarios.some((u) => u.profissionalId === x.id))
+  if (!p) throw new ApiError(422, 'Código de convite inválido ou já usado.')
+  if (emailEmUso(email)) throw new ApiError(409, 'Este e-mail já está cadastrado.')
+  const u = { id: nextId('u'), nome: p.nome, email, apelidos: [], senha: body.senha, papel: 'funcionario', salaoId: p.salaoId, profissionalId: p.id }
+  db().usuarios.push(u)
+  delete p.convite
+  save()
+  return sessaoEquipe(u)
+})
+
 route('POST', '/auth/cadastro/cliente', ({ body }) => {
   const email = String(body.email || '').trim().toLowerCase()
   if (String(body.nome || '').trim().length < 2) throw new ApiError(422, 'Informe seu nome.')
@@ -486,7 +504,10 @@ route('POST', '/painel/profissionais', (ctx) => {
   db().profissionais.push(p)
   vincularProf(p.id, p.servicoIds)
   save()
-  return { profissional: p, convite: Math.random().toString(36).slice(2, 8).toUpperCase() }
+  // o codigo fica guardado no profissional ate o funcionario usar (POST /auth/convite)
+  p.convite = Math.random().toString(36).slice(2, 8).toUpperCase()
+  save()
+  return { profissional: p, convite: p.convite }
 })
 route('PUT', '/painel/profissionais/:id', (ctx) => {
   const s = salaoDoStaff(requireAdmin(ctx))

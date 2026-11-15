@@ -37,6 +37,12 @@ export function AuthProvider({ children }) {
       persist(s)
       return s.usuario
     },
+    /** Funcionario cria a conta com o codigo de convite que recebeu do responsavel e ja entra. */
+    async aceitarConvite(dados) {
+      const s = await api.post('/auth/convite', dados)
+      persist(s)
+      return s.usuario
+    },
     /** Encerra a sessao no backend (RF05) e limpa a do navegador, mesmo se o servidor nao responder. */
     async logout() {
       try {
