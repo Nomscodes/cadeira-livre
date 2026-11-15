@@ -80,7 +80,7 @@ export default function NotificationModal({ notificacao: n, onClose, onAtualizar
           <div className="modal-row"><span>tipo</span><span className="status-chip warn">{TIPOS[n.tipo] || n.tipo}</span></div>
           <div className="modal-row"><span>recebida em</span><b>{formatDataHora(n.criadaEm)}</b></div>
           {n.remetente && <div className="modal-row"><span>enviada por</span><b>{n.remetente}</b></div>}
-          <p style={{ margin: '14px 0', fontSize: 13 }}>{n.texto}</p>
+          <p style={{ margin: '14px 0', fontSize: 'var(--fs-base)' }}>{n.texto}</p>
           {n.detalhes && (
             <div className="box info" style={{ marginTop: 0 }}>
               <div className="modal-row"><span>cliente</span><b>{n.detalhes.cliente}</b></div>

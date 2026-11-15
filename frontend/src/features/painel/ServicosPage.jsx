@@ -145,7 +145,7 @@ export default function ServicosPage() {
       <div className="grid-cards">
         {servicos.map((s) => (
           <button key={s.id} type="button" className="card-box" onClick={() => setModal({ tipo: 'servico', item: s })}>
-            <h2 style={{ fontSize: '1rem', margin: '0 0 4px', color: 'var(--c-ink-strong)' }}>{s.nome}</h2>
+            <h2 style={{ fontFamily: 'var(--font-body)', fontWeight: 600, fontSize: 'var(--fs-base)', margin: '0 0 4px', color: 'var(--c-ink-strong)' }}>{s.nome}</h2>
             <div className="meta" style={{ marginBottom: 0 }}>{money(s.preco)} · {formatDuration(s.duracao)}{s.profissionalIds.length > 0 && <><br />{nomeProfs(s.profissionalIds)}</>}</div>
             {s.profissionalIds.length === 0 && <div className="field-error">Sem profissional vinculado</div>}
           </button>
@@ -160,7 +160,7 @@ export default function ServicosPage() {
           const soma = servicos.filter((s) => c.servicoIds.includes(s.id)).reduce((t, s) => t + s.preco, 0)
           return (
             <button key={c.id} type="button" className="card-box" onClick={() => setModal({ tipo: 'combo', item: c })}>
-              <h3 style={{ fontSize: '1rem', margin: '0 0 4px', color: 'var(--c-ink-strong)' }}>{c.nome}</h3>
+              <h3 style={{ fontSize: 'var(--fs-base)', margin: '0 0 4px', color: 'var(--c-ink-strong)' }}>{c.nome}</h3>
               <div className="meta" style={{ marginBottom: 0 }}>{money(c.preco)} · soma individual: {money(soma)}</div>
             </button>
           )
