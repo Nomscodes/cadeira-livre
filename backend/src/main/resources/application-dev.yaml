@@ -12,3 +12,6 @@ app:
     secret: dev-only-secret-troque-em-producao-min-32-bytes
   cripto:
     chave: YNb3r+rU2emI33dmaQ3JP/fkJzH9fARI+bCr+o++VCg=
+  # recuperação de senha: sem envio de e-mail (fora da V7), o código aparece no log da API só em desenvolvimento
+  recuperacao:
+    mostrar-codigo-no-log: true
