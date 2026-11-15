@@ -55,8 +55,11 @@ public class ClienteAgendamentoService {
         if (!MeuAgendamentoResponse.podeCancelar(a, agora)) {
             throw ApiException.invalido("O prazo para cancelar já passou. Fale com o salão pelo WhatsApp.");
         }
+        boolean estavaNaAgenda = a.getStatus() == StatusAgendamento.APROVADO;
         a.setStatus(StatusAgendamento.CANCELADO);
         notificacaoService.paraDono(a, TipoNotificacao.CANCELAMENTO);
+        // se já estava aprovado, o horário saiu da agenda dos profissionais: eles também ficam sabendo
+        if (estavaNaAgenda) notificacaoService.paraEquipe(a, TipoNotificacao.CANCELAMENTO);
         return resposta(a, agora);
     }
 
