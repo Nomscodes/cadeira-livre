@@ -395,6 +395,8 @@ class AgendamentoServiceTest {
         assertEquals(StatusAgendamento.APROVADO, resposta.status());
         verify(auditoriaService).registrar(eq(AcaoAuditoria.AGENDAMENTO_APROVADO), anyString());
         verify(notificacaoService).paraCliente(pendente, TipoNotificacao.HORARIO_APROVADO);
+        // e os profissionais do atendimento veem o novo horário no sino deles
+        verify(notificacaoService).paraEquipe(pendente, TipoNotificacao.ATENDIMENTO_NA_AGENDA);
     }
 
     @Test

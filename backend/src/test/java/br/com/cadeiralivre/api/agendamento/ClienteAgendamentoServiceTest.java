@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -170,6 +171,8 @@ class ClienteAgendamentoServiceTest {
         assertEquals(StatusAgendamento.CANCELADO, resposta.status());
         // o dono fica sabendo do cancelamento
         verify(notificacaoService).paraDono(agendamento, TipoNotificacao.CANCELAMENTO);
+        // pendente ainda não estava na agenda dos profissionais
+        verify(notificacaoService, never()).paraEquipe(agendamento, TipoNotificacao.CANCELAMENTO);
     }
 
     @Test
@@ -182,6 +185,9 @@ class ClienteAgendamentoServiceTest {
         clienteAgendamentoService.cancelar(agendamento.getId());
 
         assertEquals(StatusAgendamento.CANCELADO, agendamento.getStatus());
+        // estava na agenda dos profissionais: o dono e a equipe ficam sabendo
+        verify(notificacaoService).paraDono(agendamento, TipoNotificacao.CANCELAMENTO);
+        verify(notificacaoService).paraEquipe(agendamento, TipoNotificacao.CANCELAMENTO);
     }
 
     @Test
