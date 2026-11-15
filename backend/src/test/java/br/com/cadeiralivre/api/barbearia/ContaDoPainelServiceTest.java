@@ -122,6 +122,8 @@ class ContaDoPainelServiceTest {
         InOrder ordem = inOrder(jdbc);
         ordem.verify(jdbc).update("delete from agendamento where barbearia_id = ?", barbeariaId);
         ordem.verify(jdbc).update("delete from profissional where barbearia_id = ?", barbeariaId);
+        // as contas dos funcionários saem junto com a do dono
+        ordem.verify(jdbc).update("delete from usuario where id in (select id from funcionario where barbearia_id = ?)", barbeariaId);
         ordem.verify(jdbc).update("delete from usuario where id in (select id from dono_barbearia where barbearia_id = ?)", barbeariaId);
         ordem.verify(jdbc).update("delete from barbearia where id = ?", barbeariaId);
     }
