@@ -40,6 +40,7 @@ import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.tenant.TenantContext;
+import br.com.cadeiralivre.api.usuario.Cliente;
 import br.com.cadeiralivre.api.usuario.DonoBarbearia;
 import br.com.cadeiralivre.api.usuario.UsuarioRepository;
 
@@ -223,6 +224,69 @@ class NotificacaoDaEquipeServiceTest {
 
         ApiException erro = assertThrows(ApiException.class,
                 () -> service.executarAcao(origem.getId(), "apagar", null, null));
+
+        assertEquals("Esta ação não está disponível para esta notificação.", erro.getMessage());
+    }
+
+    // ---------- pedir avaliação ao cliente ----------
+
+    @Test
+    void atendimentoConcluidoTemSoOBotaoDePedirAvaliacao() {
+        when(notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(barbearia.getId()))
+                .thenReturn(List.of(notificacao(TipoNotificacao.CONCLUIDO_PARA_DONO)));
+        when(notificacaoRepository.existsByAgendamentoIdAndTipo(agendamento.getId(), TipoNotificacao.PEDIDO_AVALIACAO))
+                .thenReturn(false);
+
+        NotificacaoDaEquipeResponse n = service.listar().get(0);
+
+        assertEquals("avaliacao", n.tipo());
+        assertEquals(1, n.acoes().size());
+        assertEquals("avaliacao", n.acoes().get(0).id());
+        assertEquals("Pedir avaliação ao cliente", n.acoes().get(0).rotulo());
+        assertFalse(n.acoes().get(0).usada());
+    }
+
+    @Test
+    void pedirAvaliacaoMandaUmaNotificacaoParaOCliente() {
+        Cliente marcos = new Cliente();
+        marcos.setId(UUID.randomUUID());
+        agendamento.setCliente(marcos);
+        Notificacao concluido = notificacao(TipoNotificacao.CONCLUIDO_PARA_DONO);
+        when(notificacaoRepository.findByIdAndBarbeariaId(concluido.getId(), barbearia.getId())).thenReturn(Optional.of(concluido));
+        when(notificacaoRepository.existsByAgendamentoIdAndTipo(agendamento.getId(), TipoNotificacao.PEDIDO_AVALIACAO))
+                .thenReturn(false);
+
+        int enviados = service.executarAcao(concluido.getId(), "avaliacao", null, null);
+
+        assertEquals(1, enviados);
+        ArgumentCaptor<Notificacao> salva = ArgumentCaptor.forClass(Notificacao.class);
+        verify(notificacaoRepository).save(salva.capture());
+        assertEquals(TipoNotificacao.PEDIDO_AVALIACAO, salva.getValue().getTipo());
+        assertSame(marcos, salva.getValue().getCliente());
+        assertSame(agendamento, salva.getValue().getAgendamento());
+    }
+
+    @Test
+    void avaliacaoSoPodeSerPedidaUmaVez() {
+        Notificacao concluido = notificacao(TipoNotificacao.CONCLUIDO_PARA_DONO);
+        when(notificacaoRepository.findByIdAndBarbeariaId(concluido.getId(), barbearia.getId())).thenReturn(Optional.of(concluido));
+        when(notificacaoRepository.existsByAgendamentoIdAndTipo(agendamento.getId(), TipoNotificacao.PEDIDO_AVALIACAO))
+                .thenReturn(true);
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> service.executarAcao(concluido.getId(), "avaliacao", null, null));
+
+        assertEquals("A avaliação deste atendimento já foi pedida.", erro.getMessage());
+        verify(notificacaoRepository, never()).save(any());
+    }
+
+    @Test
+    void naoDaParaPedirAvaliacaoDeUmNovoPedido() {
+        Notificacao novo = notificacao(TipoNotificacao.NOVO_AGENDAMENTO);
+        when(notificacaoRepository.findByIdAndBarbeariaId(novo.getId(), barbearia.getId())).thenReturn(Optional.of(novo));
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> service.executarAcao(novo.getId(), "avaliacao", null, null));
 
         assertEquals("Esta ação não está disponível para esta notificação.", erro.getMessage());
     }
