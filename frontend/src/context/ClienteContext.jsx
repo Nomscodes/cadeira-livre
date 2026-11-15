@@ -26,7 +26,11 @@ export function ClienteProvider({ children }) {
     async entrar(dados) {
       const s = await api.post('/auth/login', dados)
       // o login e o mesmo para dono e cliente; esta tela e so do cliente
-      if (s.usuario.papel !== 'CLIENTE') throw new Error('Esta conta é de dono de barbearia. Entre pela tela de login do painel.')
+      if (s.usuario.papel !== 'CLIENTE') {
+        // a API ja abriu a sessao: encerra para nao deixar um token valido sobrando (RF05)
+        api.post('/auth/logout', undefined, { token: s.token }).catch(() => {})
+        throw new Error('Esta conta é de dono de barbearia. Entre pela tela de login do painel.')
+      }
       persist(s)
     },
     async cadastrar(dados) {

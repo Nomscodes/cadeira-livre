@@ -17,9 +17,9 @@ const nomeProf = (p) => p?.nomeSocial || p?.nome || ''
 // papel guardado no banco simulado -> papel que o backend devolve na sessao
 const PAPEL_DA_SESSAO = { administrador: 'DONO', funcionario: 'FUNCIONARIO' }
 
-/** Sessao no mesmo formato do backend: { token, usuario: { id, nome, papel, barbeariaId } }. */
+/** Sessao no mesmo formato do backend: { token, usuario: { id, nome, papel, barbeariaId, profissionalId } }. */
 function sessaoEquipe(u) {
-  return { token: `mock.staff.${u.id}`, usuario: { id: u.id, nome: u.nome, papel: PAPEL_DA_SESSAO[u.papel], barbeariaId: u.salaoId } }
+  return { token: `mock.staff.${u.id}`, usuario: { id: u.id, nome: u.nome, papel: PAPEL_DA_SESSAO[u.papel], barbeariaId: u.salaoId, profissionalId: u.profissionalId || null } }
 }
 function sessaoCliente(c) {
   return { token: `mock.cliente.${c.telefone}`, usuario: { id: c.id, nome: c.nome, papel: 'CLIENTE', barbeariaId: null } }
@@ -266,6 +266,7 @@ const TITULOS_CLIENTE = {
   HORARIO_RECUSADO: 'Pedido não aceito',
   ATENDIMENTO_CONCLUIDO: 'Como foi seu atendimento?',
   LEMBRETE_CLIENTE: 'Seu horário é amanhã',
+  PEDIDO_AVALIACAO: 'O salão pediu sua avaliação',
 }
 
 function textoParaCliente(tipo, a) {
@@ -276,6 +277,7 @@ function textoParaCliente(tipo, a) {
   if (tipo === 'HORARIO_RECUSADO') return `A barbearia não pôde aceitar seu ${servico} em ${dia} às ${a.hora}. Escolha outro horário.`
   if (tipo === 'ATENDIMENTO_CONCLUIDO') return `Seu ${servico} com ${profissional} foi concluído. Toque para avaliar.`
   const s = db().saloes.find((x) => x.id === a.salaoId)
+  if (tipo === 'PEDIDO_AVALIACAO') return `A ${s?.nome} quer saber como foi seu ${servico} com ${profissional}. Toque para avaliar.`
   return `${servico} com ${profissional} em ${dia} às ${a.hora}, na ${s?.nome}.`
 }
 
@@ -645,7 +647,11 @@ route('POST', '/notificacoes/:id/acao', (ctx) => {
   const { acao, mensagem, profissionalIds } = ctx.body
   if (!acoesDa(n, u).some((a) => a.id === acao)) throw new ApiError(422, 'Esta ação não está disponível para esta notificação.')
   if (acao === 'avaliacao') {
+    if (n.avaliacaoEnviada) throw new ApiError(422, 'A avaliação deste atendimento já foi pedida.')
     n.avaliacaoEnviada = true
+    // igual ao backend: o pedido chega no sino do cliente (uma vez por atendimento)
+    if (!db().notificacoesCliente) db().notificacoesCliente = []
+    db().notificacoesCliente.push({ id: nextId('nc'), agendamentoId: n.agendamentoId, tipo: 'PEDIDO_AVALIACAO', criadaEm: new Date().toISOString(), lidaEm: null })
     save()
     return { enviados: 1 }
   }

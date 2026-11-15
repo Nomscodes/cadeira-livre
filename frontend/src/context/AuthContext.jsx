@@ -28,7 +28,11 @@ export function AuthProvider({ children }) {
     async login(dados) {
       const s = await api.post('/auth/login', dados)
       // o login e o mesmo para todos; esta tela e so da equipe, o cliente usa a area do cliente
-      if (!PAPEIS_DA_EQUIPE.includes(s.usuario.papel)) throw new Error('Esta conta é de cliente. Para agendar, use "Sou cliente, quero agendar um horário".')
+      if (!PAPEIS_DA_EQUIPE.includes(s.usuario.papel)) {
+        // a API ja abriu a sessao: encerra para nao deixar um token valido sobrando (RF05)
+        api.post('/auth/logout', undefined, { token: s.token }).catch(() => {})
+        throw new Error('Esta conta é de cliente. Para agendar, use "Sou cliente, quero agendar um horário".')
+      }
       persist(s)
       return s.usuario
     },
