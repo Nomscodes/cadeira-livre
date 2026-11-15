@@ -21,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Sino do painel no formato do front: lista, marcar como lida e as ações do responsável
- * (por enquanto, "Enviar aviso à equipe"). A barbearia vem sempre do JWT.
+ * ("Enviar aviso à equipe" e "Pedir avaliação ao cliente"). A barbearia vem sempre do JWT.
  */
 @Service
 @RequiredArgsConstructor
@@ -36,7 +36,7 @@ public class NotificacaoDaEquipeService {
     @Transactional(readOnly = true)
     public List<NotificacaoDaEquipeResponse> listar() {
         return notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(TenantContext.require())
-                .stream().map(n -> NotificacaoDaEquipeResponse.de(n, true)).toList();
+                .stream().map(n -> NotificacaoDaEquipeResponse.de(n, true, avaliacaoJaPedida(n))).toList();
     }
 
     @Transactional
@@ -48,14 +48,43 @@ public class NotificacaoDaEquipeService {
         }
     }
 
-    /** Executa a ação escolhida no modal. Devolve quantos avisos foram enviados. */
+    /**
+     * Executa a ação escolhida no modal. Devolve quantas notificações foram enviadas.
+     * Atendimento concluído só tem "avaliacao"; as outras (menos o aviso) só têm "aviso".
+     */
     @Transactional
     public int executarAcao(UUID id, String acao, String mensagem, List<UUID> profissionalIds) {
         Notificacao n = doDono(id);
-        if (!"aviso".equals(acao) || n.getTipo() == TipoNotificacao.AVISO_EQUIPE) {
-            throw ApiException.invalido("Esta ação não está disponível para esta notificação.");
+        boolean concluido = n.getTipo() == TipoNotificacao.CONCLUIDO_PARA_DONO;
+        if ("avaliacao".equals(acao) && concluido) {
+            return pedirAvaliacao(n);
         }
-        return enviarAviso(n, mensagem, profissionalIds);
+        if ("aviso".equals(acao) && !concluido && n.getTipo() != TipoNotificacao.AVISO_EQUIPE) {
+            return enviarAviso(n, mensagem, profissionalIds);
+        }
+        throw ApiException.invalido("Esta ação não está disponível para esta notificação.");
+    }
+
+    // manda para o sino do cliente um pedido de avaliação (uma vez por atendimento)
+    private int pedirAvaliacao(Notificacao origem) {
+        if (avaliacaoJaPedida(origem)) {
+            throw ApiException.invalido("A avaliação deste atendimento já foi pedida.");
+        }
+        if (origem.getAgendamento().getCliente() == null) {
+            throw ApiException.invalido("Este cliente não tem conta para receber o pedido de avaliação.");
+        }
+        Notificacao pedido = new Notificacao();
+        pedido.setTipo(TipoNotificacao.PEDIDO_AVALIACAO);
+        pedido.setAgendamento(origem.getAgendamento());
+        pedido.setCliente(origem.getAgendamento().getCliente());
+        pedido.setCriadaEm(Instant.now(clock));
+        notificacaoRepository.save(pedido);
+        return 1;
+    }
+
+    private boolean avaliacaoJaPedida(Notificacao n) {
+        return n.getTipo() == TipoNotificacao.CONCLUIDO_PARA_DONO
+                && notificacaoRepository.existsByAgendamentoIdAndTipo(n.getAgendamento().getId(), TipoNotificacao.PEDIDO_AVALIACAO);
     }
 
     // cria uma notificação para cada profissional escolhido (o próprio dono não recebe)
