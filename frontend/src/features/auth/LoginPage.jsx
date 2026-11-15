@@ -45,6 +45,9 @@ function LoginForm({ onConvite }) {
       <hr className="divider" />
       <Link to="/acesso" className="btn ghost block">Sou cliente, quero agendar um horário</Link>
       <button type="button" className="btn ghost block" style={{ marginTop: 8 }} onClick={onConvite}>Sou funcionário, tenho um código de convite</button>
+      <p className="text-center" style={{ marginTop: 16, marginBottom: 0 }}>
+        <Link to="/recuperar-senha" className="link">esqueci minha senha</Link>
+      </p>
     </form>
   )
 }
