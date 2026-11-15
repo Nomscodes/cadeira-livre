@@ -89,8 +89,8 @@ public class AgendaService {
                 a.getItens().stream().map(AgendamentoItem::getNome).collect(Collectors.joining(" + ")));
     }
 
-    // a agenda é só do funcionário; o profissional é o ligado à conta logada
-    private Profissional profissionalLogado() {
+    // a agenda é só do funcionário; o profissional é o ligado à conta logada (o calendário usa a mesma regra)
+    Profissional profissionalLogado() {
         if (!UsuarioLogado.ehFuncionario()) {
             throw ApiException.proibido("Esta tela é só para os profissionais da equipe.");
         }
