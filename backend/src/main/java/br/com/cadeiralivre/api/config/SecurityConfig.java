@@ -47,8 +47,10 @@ public class SecurityConfig {
                         "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/painel/**").hasRole("DONO")
                 .requestMatchers("/cliente/**").hasRole("CLIENTE")
-                // sino do painel: do dono e, quando o login do funcionário chegar, da equipe
+                // sino do painel: do dono e dos funcionários
                 .requestMatchers("/notificacoes/**").hasAnyRole("DONO", "FUNCIONARIO")
+                // "Minha agenda": só o funcionário (o dono usa o painel)
+                .requestMatchers("/agenda/**").hasRole("FUNCIONARIO")
                 .anyRequest().authenticated())
             .addFilterBefore(new JwtAuthenticationFilter(jwtService, sessaoService),
                     UsernamePasswordAuthenticationFilter.class);
