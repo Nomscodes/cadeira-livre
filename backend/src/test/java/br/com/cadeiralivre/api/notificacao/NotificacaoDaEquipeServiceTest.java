@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -291,7 +292,59 @@ class NotificacaoDaEquipeServiceTest {
         assertEquals("Esta ação não está disponível para esta notificação.", erro.getMessage());
     }
 
+    // ---------- funcionário (só lê os avisos dele) ----------
+
+    @Test
+    void funcionarioVeSoOsAvisosDoProfissionalDeleSemAcoes() {
+        UUID contaDoDiego = logarComoFuncionario();
+        when(profissionalRepository.findByUsuarioId(contaDoDiego)).thenReturn(Optional.of(diego));
+        Notificacao aviso = notificacao(TipoNotificacao.AVISO_EQUIPE);
+        aviso.setProfissional(diego);
+        aviso.setTexto("Cliente chega 10 min antes.");
+        aviso.setRemetente("Gabriel Naoki");
+        when(notificacaoRepository.findTop30ByProfissionalIdOrderByCriadaEmDesc(diego.getId())).thenReturn(List.of(aviso));
+
+        NotificacaoDaEquipeResponse n = service.listar().get(0);
+
+        assertEquals("aviso", n.tipo());
+        assertEquals("Aviso do responsável", n.titulo());
+        assertEquals("Gabriel Naoki", n.remetente());
+        assertTrue(n.acoes().isEmpty());
+        verify(notificacaoRepository, never()).findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(any());
+    }
+
+    @Test
+    void funcionarioSoMarcaComoLidaOQueEhDele() {
+        UUID contaDoDiego = logarComoFuncionario();
+        when(profissionalRepository.findByUsuarioId(contaDoDiego)).thenReturn(Optional.of(diego));
+        UUID doDono = UUID.randomUUID();
+        when(notificacaoRepository.findByIdAndProfissionalId(doDono, diego.getId())).thenReturn(Optional.empty());
+
+        ApiException erro = assertThrows(ApiException.class, () -> service.marcarComoLida(doDono));
+
+        assertEquals(404, erro.getStatus().value());
+    }
+
+    @Test
+    void funcionarioNaoExecutaAcoes() {
+        logarComoFuncionario();
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> service.executarAcao(UUID.randomUUID(), "aviso", "Oi", List.of(gabriel.getId())));
+
+        assertEquals(403, erro.getStatus().value());
+        verify(notificacaoRepository, never()).save(any());
+    }
+
     // ---------- métodos de apoio ----------
+
+    // troca o login do dono pelo de um funcionário (a conta do Diego)
+    private UUID logarComoFuncionario() {
+        UUID conta = UUID.randomUUID();
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                conta.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_FUNCIONARIO"))));
+        return conta;
+    }
 
     private void prepararAviso(Notificacao origem) {
         when(notificacaoRepository.findByIdAndBarbeariaId(origem.getId(), barbearia.getId())).thenReturn(Optional.of(origem));

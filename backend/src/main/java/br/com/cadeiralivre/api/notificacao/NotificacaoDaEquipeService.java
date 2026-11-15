@@ -21,7 +21,7 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * Sino do painel no formato do front: lista, marcar como lida e as ações do responsável
- * ("Enviar aviso à equipe" e "Pedir avaliação ao cliente"). A barbearia vem sempre do JWT.
+ * ("Enviar aviso à equipe" e "Pedir avaliação ao cliente"). O funcionário só lê os avisos dele. A barbearia vem do JWT.
  */
 @Service
 @RequiredArgsConstructor
@@ -32,16 +32,26 @@ public class NotificacaoDaEquipeService {
     private final UsuarioRepository usuarioRepository;
     private final Clock clock;
 
-    /** As notificações do dono (sem os avisos que ele mandou para a equipe). */
+    /**
+     * Dono: as notificações do salão (sem os avisos que ele mandou para a equipe), com as ações.
+     * Funcionário: só o que foi mandado para o profissional dele, sem ações (ele apenas lê).
+     */
     @Transactional(readOnly = true)
     public List<NotificacaoDaEquipeResponse> listar() {
+        if (UsuarioLogado.ehFuncionario()) {
+            return notificacaoRepository.findTop30ByProfissionalIdOrderByCriadaEmDesc(profissionalDoFuncionario())
+                    .stream().map(n -> NotificacaoDaEquipeResponse.de(n, false, false)).toList();
+        }
         return notificacaoRepository.findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(TenantContext.require())
                 .stream().map(n -> NotificacaoDaEquipeResponse.de(n, true, avaliacaoJaPedida(n))).toList();
     }
 
     @Transactional
     public void marcarComoLida(UUID id) {
-        Notificacao n = doDono(id);
+        Notificacao n = UsuarioLogado.ehFuncionario()
+                ? notificacaoRepository.findByIdAndProfissionalId(id, profissionalDoFuncionario())
+                        .orElseThrow(() -> ApiException.naoEncontrado("Notificação não encontrada."))
+                : doDono(id);
         // RF04: guarda quando foi vista; abrir de novo não muda a data
         if (n.getLidaEm() == null) {
             n.setLidaEm(Instant.now(clock));
@@ -54,6 +64,9 @@ public class NotificacaoDaEquipeService {
      */
     @Transactional
     public int executarAcao(UUID id, String acao, String mensagem, List<UUID> profissionalIds) {
+        if (UsuarioLogado.ehFuncionario()) {
+            throw ApiException.proibido("Só o responsável do salão pode fazer isso.");
+        }
         Notificacao n = doDono(id);
         boolean concluido = n.getTipo() == TipoNotificacao.CONCLUIDO_PARA_DONO;
         if ("avaliacao".equals(acao) && concluido) {
@@ -121,6 +134,13 @@ public class NotificacaoDaEquipeService {
             notificacaoRepository.save(aviso);
         }
         return alvos.size();
+    }
+
+    // o profissional ligado à conta do funcionário logado
+    private UUID profissionalDoFuncionario() {
+        return profissionalRepository.findByUsuarioId(UsuarioLogado.usuarioId())
+                .map(Profissional::getId)
+                .orElseThrow(() -> ApiException.naoAutorizado("Faça login para continuar."));
     }
 
     // notificação da barbearia logada que é do dono (não pega os avisos que foram para os profissionais)

@@ -16,8 +16,14 @@ public interface NotificacaoRepository extends JpaRepository<Notificacao, UUID> 
     @EntityGraph(attributePaths = {"agendamento", "agendamento.servico", "agendamento.profissional", "agendamento.barbearia"})
     List<Notificacao> findTop30ByClienteIdOrderByCriadaEmDesc(UUID clienteId);
 
+    // sino do funcionário: só o que foi mandado para o profissional dele
+    @EntityGraph(attributePaths = {"agendamento", "agendamento.servico", "agendamento.profissional", "agendamento.barbearia"})
+    List<Notificacao> findTop30ByProfissionalIdOrderByCriadaEmDesc(UUID profissionalId);
+
     // cada um só mexe nas notificações que são dele
     Optional<Notificacao> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
+
+    Optional<Notificacao> findByIdAndProfissionalId(UUID id, UUID profissionalId);
 
     Optional<Notificacao> findByIdAndClienteId(UUID id, UUID clienteId);
 
