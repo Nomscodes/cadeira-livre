@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
-import { resetMock } from '../mocks/db'
+import { getDb, resetMock, save } from '../mocks/db'
 import { api } from '../lib/http'
 
 const abrir = (url) => {
@@ -140,6 +140,33 @@ describe('login', () => {
     expect((await api.get('/painel/profissionais', { as: 'staff' })).profissionais).toEqual([
       expect.objectContaining({ nome: 'Gabriel Naoki', ehAdmin: true, atende: false }),
     ])
+  })
+  it('funcionario cria o acesso com o codigo de convite e cai na propria agenda', async () => {
+    const user = userEvent.setup()
+    // o responsavel cadastrou a Juliana e recebeu este codigo
+    getDb().profissionais.find((p) => p.id === 'p2').convite = 'JULI23'
+    save()
+    abrir('/login')
+    await user.click(await screen.findByRole('button', { name: 'Sou funcionário, tenho um código de convite' }))
+    await user.click(screen.getByRole('button', { name: 'Criar meu acesso' }))
+    expect(await screen.findByText('Informe o código que o responsável do salão passou.')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText(/código de convite/), 'ERRADO')
+    await user.type(screen.getByLabelText(/^e-mail/), 'juliana@teste.com')
+    await user.type(screen.getByLabelText(/^senha/), '12345678')
+    await user.type(screen.getByLabelText(/confirmação de senha/), '12345678')
+    await user.click(screen.getByLabelText(/li e aceito os termos/))
+    await user.click(screen.getByRole('button', { name: 'Criar meu acesso' }))
+    expect(await screen.findByRole('alert', {}, espera)).toHaveTextContent('Código de convite inválido ou já usado.')
+
+    // o codigo pode ser digitado em minusculas
+    await user.clear(screen.getByLabelText(/código de convite/))
+    await user.type(screen.getByLabelText(/código de convite/), 'juli23')
+    await user.click(screen.getByRole('button', { name: 'Criar meu acesso' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/agenda'), espera)
+    expect(JSON.parse(window.localStorage.getItem('cl:staff')).usuario).toMatchObject({ nome: 'Juliana Matos', papel: 'FUNCIONARIO' })
+    // o codigo nao vale de novo
+    expect(getDb().profissionais.find((p) => p.id === 'p2').convite).toBeUndefined()
   })
   it('rotas protegidas redirecionam para o login', async () => {
     abrir('/painel')
