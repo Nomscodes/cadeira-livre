@@ -5,6 +5,7 @@ import NotFoundPage from './NotFoundPage'
 
 import LoginPage from '../features/auth/LoginPage'
 import AcessoPage from '../features/auth/AcessoPage'
+import RecuperarSenhaPage from '../features/auth/RecuperarSenhaPage'
 
 import ClienteLayout from '../components/layout/ClienteLayout'
 import BuscarPage from '../features/cliente/BuscarPage'
@@ -34,7 +35,7 @@ function ScrollToTop() {
 /**
  * Mapa de rotas do front.
  * Rotas fixas vem antes de /:slug (o react-router da prioridade a rota mais especifica).
- * Slugs reservados (nao podem ser nome de salao): login, acesso, buscar,
+ * Slugs reservados (nao podem ser nome de salao): login, recuperar-senha, acesso, buscar,
  * meus-agendamentos, avaliar, painel, agenda, api.
  */
 export default function AppRoutes() {
@@ -46,6 +47,7 @@ export default function AppRoutes() {
 
         {/* entrada e autenticacao */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/recuperar-senha" element={<RecuperarSenhaPage />} />
         <Route path="/acesso" element={<AcessoPage />} />
 
         {/* cliente logado */}

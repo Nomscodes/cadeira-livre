@@ -168,6 +168,37 @@ describe('login', () => {
     // o codigo nao vale de novo
     expect(getDb().profissionais.find((p) => p.id === 'p2').convite).toBeUndefined()
   })
+  it('recupera a senha em 3 passos: e-mail, codigo e nova senha', async () => {
+    const user = userEvent.setup()
+    abrir('/login')
+    await user.click(await screen.findByRole('link', { name: 'esqueci minha senha' }))
+    expect(await screen.findByRole('heading', { name: 'Recuperar senha' })).toBeInTheDocument()
+
+    // e-mail que nao existe oferece o cadastro
+    await user.type(screen.getByLabelText('e-mail cadastrado'), 'ninguem@teste.com')
+    await user.click(screen.getByRole('button', { name: 'Continuar' }))
+    expect(await screen.findByText('Este e-mail não está cadastrado.', {}, espera)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Tentar outro e-mail' }))
+
+    // a cliente de teste recebe o codigo e troca a senha
+    await user.clear(screen.getByLabelText('e-mail cadastrado'))
+    await user.type(screen.getByLabelText('e-mail cadastrado'), 'cliente@teste.com')
+    await user.click(screen.getByRole('button', { name: 'Continuar' }))
+    await user.type(await screen.findByLabelText('código recebido', {}, espera), '000000')
+    await user.click(screen.getByRole('button', { name: 'Confirmar código' }))
+    expect(await screen.findByRole('alert', {}, espera)).toHaveTextContent('Código incorreto')
+    await user.clear(screen.getByLabelText('código recebido'))
+    await user.type(screen.getByLabelText('código recebido'), '123456')
+    await user.click(screen.getByRole('button', { name: 'Confirmar código' }))
+    await user.type(await screen.findByLabelText('nova senha', {}, espera), 'novaSenha2026')
+    await user.type(screen.getByLabelText('confirmação da nova senha'), 'novaSenha2026')
+    await user.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
+    await waitFor(() => expect(window.location.pathname).toBe('/login'), espera)
+
+    // a senha nova passa a valer no login
+    const s = await api.post('/auth/login', { email: 'cliente@teste.com', senha: 'novaSenha2026' })
+    expect(s.usuario.papel).toBe('CLIENTE')
+  })
   it('rotas protegidas redirecionam para o login', async () => {
     abrir('/painel')
     expect(await screen.findByRole('tab', { name: /entrar/i }, espera)).toBeInTheDocument()
