@@ -21,9 +21,11 @@ const tokenFor = (as) => {
  * Os componentes nao sabem qual dos dois esta ativo.
  *
  * `as`: 'staff' (responsavel/funcionario), 'cliente' (acesso temporario) ou omitido (publico).
+ * `token`: um token especifico, no lugar do guardado para `as`.
  */
-async function perform(method, path, { body, query, as } = {}) {
-  const token = tokenFor(as)
+async function perform(method, path, { body, query, as, token: tokenProprio } = {}) {
+  // token: usado quando a sessao ainda nao foi guardada (ex.: encerrar a sessao de uma conta da tela errada)
+  const token = tokenProprio || tokenFor(as)
 
   if (USE_MOCK) {
     const { mockRequest } = await import('../mocks')
