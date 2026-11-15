@@ -9,10 +9,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import br.com.cadeiralivre.api.agendamento.Agendamento;
+import br.com.cadeiralivre.api.agendamento.AgendamentoItem;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.notificacao.dto.NotificacaoResponse;
 import br.com.cadeiralivre.api.security.UsuarioLogado;
 import br.com.cadeiralivre.api.tenant.TenantContext;
+import br.com.cadeiralivre.api.usuario.Papel;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -32,6 +34,24 @@ public class NotificacaoService {
         Notificacao n = nova(agendamento, tipo);
         n.setBarbearia(agendamento.getBarbearia());
         notificacaoRepository.save(n);
+    }
+
+    /**
+     * Aviso para cada profissional do atendimento que tem conta de funcionário (o dono já recebe pelo paraDono).
+     * Quem ainda não criou a conta com o convite não tem onde ver, então não recebe.
+     */
+    @Transactional
+    public void paraEquipe(Agendamento agendamento, TipoNotificacao tipo) {
+        agendamento.getItens().stream()
+                .map(AgendamentoItem::getProfissional)
+                .distinct()
+                .filter(p -> p.getUsuario() != null && p.getUsuario().getPapel() == Papel.FUNCIONARIO)
+                .forEach(p -> {
+                    Notificacao n = nova(agendamento, tipo);
+                    n.setBarbearia(agendamento.getBarbearia());
+                    n.setProfissional(p);
+                    notificacaoRepository.save(n);
+                });
     }
 
     /** Aviso para o cliente. Quem agendou sem conta não recebe, porque não tem onde ver. */
