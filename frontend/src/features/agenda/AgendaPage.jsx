@@ -6,6 +6,7 @@ import {
   formatDateBR, formatDuration, formatLongDate, monthKey, resumoHorarios, shiftMonth, toHHMM, toMinutes, weekdayOf,
 } from '../../lib/dates'
 import { initials, plural } from '../../lib/format'
+import { grupoDoStatus } from '../../lib/status'
 import { useAuth } from '../../context/AuthContext'
 import { useToast } from '../../context/ToastContext'
 import ThemeScope from '../../theme/ThemeScope'
@@ -78,7 +79,8 @@ function MeusAgendamentos({ onAbrir }) {
 
   const grupos = useMemo(() => {
     const g = { confirmado: [], finalizado: [], cancelado: [] }
-    ;(data || []).forEach((a) => g[a.status]?.push(a))
+    // separa pelo grupo do status (aceita o status do backend e o da API simulada)
+    ;(data || []).forEach((a) => g[grupoDoStatus(a.status)]?.push(a))
     const cmp = (a, b) => (a.data + a.hora).localeCompare(b.data + b.hora)
     g.confirmado.sort(cmp) // do mais proximo ao mais distante
     g.finalizado.sort((a, b) => cmp(b, a)) // do mais recente ao mais antigo
