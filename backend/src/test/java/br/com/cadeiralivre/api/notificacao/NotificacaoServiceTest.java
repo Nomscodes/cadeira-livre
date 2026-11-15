@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -32,6 +33,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import br.com.cadeiralivre.api.agendamento.Agendamento;
+import br.com.cadeiralivre.api.agendamento.AgendamentoItem;
 import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
@@ -40,6 +42,9 @@ import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.tenant.TenantContext;
 import br.com.cadeiralivre.api.usuario.Cliente;
+import br.com.cadeiralivre.api.usuario.DonoBarbearia;
+import br.com.cadeiralivre.api.usuario.Funcionario;
+import br.com.cadeiralivre.api.usuario.Usuario;
 
 @ExtendWith(MockitoExtension.class)
 class NotificacaoServiceTest {
@@ -118,6 +123,36 @@ class NotificacaoServiceTest {
         verify(notificacaoRepository).save(salva.capture());
         assertSame(gabriel, salva.getValue().getCliente());
         assertNull(salva.getValue().getBarbearia());
+    }
+
+    @Test
+    void equipeRecebeSoQuemTemContaDeFuncionarioUmaVezCada() {
+        // combo: o Diego faz corte e barba (2 itens), o dono faz a sobrancelha e a Ana ainda não usou o convite
+        Profissional diego = profissionalComConta("Diego Santos", new Funcionario());
+        Profissional donoGabriel = profissionalComConta("Gabriel Naoki", new DonoBarbearia());
+        Profissional ana = profissionalComConta("Ana Lima", null);
+        agendamento.adicionarItem(item(diego));
+        agendamento.adicionarItem(item(diego));
+        agendamento.adicionarItem(item(donoGabriel));
+        agendamento.adicionarItem(item(ana));
+
+        notificacaoService.paraEquipe(agendamento, TipoNotificacao.ATENDIMENTO_NA_AGENDA);
+
+        ArgumentCaptor<Notificacao> salva = ArgumentCaptor.forClass(Notificacao.class);
+        verify(notificacaoRepository).save(salva.capture());
+        assertSame(diego, salva.getValue().getProfissional());
+        assertSame(barbearia, salva.getValue().getBarbearia());
+        assertEquals(TipoNotificacao.ATENDIMENTO_NA_AGENDA, salva.getValue().getTipo());
+    }
+
+    @Test
+    void atendimentoNaAgendaMostraOClienteEOHorario() {
+        Notificacao n = notificacao(TipoNotificacao.ATENDIMENTO_NA_AGENDA);
+
+        NotificacaoResponse r = NotificacaoResponse.de(n);
+
+        assertEquals("Novo atendimento na sua agenda", r.titulo());
+        assertEquals("Gabriel Naoki marcou Corte com você em 12/11 às 14:00.", r.texto());
     }
 
     @Test
@@ -264,6 +299,23 @@ class NotificacaoServiceTest {
         n.setAgendamento(agendamento);
         n.setCriadaEm(agora);
         return n;
+    }
+
+    private Profissional profissionalComConta(String nome, Usuario conta) {
+        Profissional p = new Profissional();
+        p.setId(UUID.randomUUID());
+        p.setNome(nome);
+        p.setUsuario(conta);
+        return p;
+    }
+
+    private AgendamentoItem item(Profissional p) {
+        AgendamentoItem i = new AgendamentoItem();
+        i.setNome("Corte");
+        i.setProfissional(p);
+        i.setPreco(new BigDecimal("40.00"));
+        i.setDuracaoMinutos(30);
+        return i;
     }
 
     // simula o que o JwtAuthenticationFilter faz com o token
