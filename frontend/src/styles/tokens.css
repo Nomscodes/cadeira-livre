@@ -10,9 +10,21 @@
   --brand-creme: #FFEDCB;
   --brand-grafite: #1E1B1D;
 
-  --font-display: 'Cinzel', 'Georgia', serif;
-  --font-body: 'Inter', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
-  --font-mono: 'Courier New', Courier, monospace; /* rotulos e metadados, como no mockup */
+  --font-display: 'DM Serif Display', 'Georgia', serif; /* so peso 400: usar apenas em h1 e h2 */
+  --font-body: 'DM Sans', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Courier New', monospace; /* rotulos e metadados */
+
+  /* ---- escala tipografica (rem: respeita o zoom de fonte do navegador) ----
+     Piso minimo do sistema: --fs-label (12px). Corpo: --fs-base (16px). */
+  --fs-label: 0.75rem;   /* 12px: rotulos, metadados, chips, badges */
+  --fs-xs: 0.8125rem;    /* 13px: botoes e abas em caixa alta */
+  --fs-sm: 0.875rem;     /* 14px: texto secundario, tabelas, navegacao */
+  --fs-base: 1rem;       /* 16px: corpo, campos de formulario */
+  --fs-md: 1.125rem;     /* 18px: titulos de bloco e marca no cabecalho */
+  --fs-lg: 1.25rem;      /* 20px: h3, nomes de destaque, precos */
+  --fs-xl: 1.5rem;       /* 24px: numeros de destaque */
+  --fs-h2: clamp(1.375rem, 1.1rem + 1vw, 1.75rem);
+  --fs-h1: clamp(1.75rem, 1.2rem + 2vw, 2.5rem);
 
   /* ---- neutros e estados ---- */
   --bg: #F7F0E1;
