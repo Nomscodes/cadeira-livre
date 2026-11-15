@@ -40,6 +40,26 @@ public final class AgendaResponse {
         }
     }
 
+    /**
+     * Calendário do mês: horário do profissional e do salão (chaves "0".."6"), os agendamentos do mês,
+     * os descansos que ele marcou, os dias com o salão fechado e as folgas dele.
+     * podeEditar = o responsável liberou o funcionário para marcar descansos.
+     */
+    public record Mes(ProfissionalDoMes profissional, boolean podeEditar, List<Item> agendamentos,
+                      List<Descanso> descansos, List<DiaFechado> bloqueios, List<DiaFechado> folgas,
+                      Map<String, Dia> salaoHorarios) {
+    }
+
+    public record ProfissionalDoMes(UUID id, String nome, Map<String, Dia> horarios) {
+    }
+
+    /** Uma hora de descanso marcada pelo funcionário (ex.: 15:00 até 16:00). */
+    public record Descanso(LocalDate data, String hora) {
+    }
+
+    public record DiaFechado(LocalDate data, String motivo) {
+    }
+
     /** Cabeçalho da tela: o perfil do profissional, o salão (para o tema) e os indicadores. */
     public record Resumo(Perfil profissional, Salao salao, Indicadores indicadores) {
     }
