@@ -47,7 +47,7 @@ route('POST', '/auth/cadastro', ({ body }) => {
   if (body.aceitouTermos !== true) throw new ApiError(422, 'Aceite os termos de uso e a política de privacidade.')
   if (emailEmUso(email)) throw new ApiError(409, 'Este e-mail já está cadastrado.')
 
-  const RESERVADOS = ['login', 'acesso', 'buscar', 'meus-agendamentos', 'avaliar', 'painel', 'agenda', 'api']
+  const RESERVADOS = ['login', 'recuperar-senha', 'acesso', 'buscar', 'meus-agendamentos', 'avaliar', 'painel', 'agenda', 'api']
   let base = slugify(body.razaoSocial || body.nome) || 'meu-salao'
   if (RESERVADOS.includes(base)) base = `${base}-salao`
   let slug = base
@@ -72,6 +72,33 @@ route('POST', '/auth/cadastro', ({ body }) => {
   db().usuarios.push(u)
   save()
   return sessaoEquipe(u)
+})
+
+/**
+ * Recuperar senha (mesmo contrato do backend: /auth/recuperar, /codigo e /redefinir). Vale para qualquer conta.
+ * No mock o codigo e sempre o de teste; no backend ele e sorteado e, em desenvolvimento, aparece no log da API.
+ */
+const CODIGO_TESTE = '123456'
+const contaPorEmail = (email) => {
+  const e = norm(email).trim()
+  return db().usuarios.find((u) => norm(u.email) === e) || db().clientes.find((c) => norm(c.email) === e)
+}
+route('POST', '/auth/recuperar', ({ body }) => {
+  if (!contaPorEmail(body.email)) throw new ApiError(404, 'Este e-mail não está cadastrado.')
+  return null
+})
+route('POST', '/auth/recuperar/codigo', ({ body }) => {
+  if (String(body.codigo || '').trim() !== CODIGO_TESTE) throw new ApiError(422, 'Código incorreto. Confira o e-mail e tente de novo.')
+  return null
+})
+route('POST', '/auth/recuperar/redefinir', ({ body }) => {
+  if (String(body.codigo || '').trim() !== CODIGO_TESTE) throw new ApiError(422, 'Código incorreto. Confira o e-mail e tente de novo.')
+  const conta = contaPorEmail(body.email)
+  if (!conta) throw new ApiError(422, 'Código incorreto. Confira o e-mail e tente de novo.')
+  if (!body.novaSenha || body.novaSenha.length < 8) throw new ApiError(422, 'A senha precisa ter ao menos 8 caracteres.')
+  // as contas de teste (admin/func) mantem a senha para nao travar as demonstracoes
+  if (!conta.apelidos?.length) { conta.senha = body.novaSenha; save() }
+  return null
 })
 
 /** Funcionario cria a conta com o codigo de convite (mesmo contrato do backend). O codigo so vale uma vez. */
