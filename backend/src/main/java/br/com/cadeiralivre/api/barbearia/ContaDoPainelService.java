@@ -73,7 +73,8 @@ public class ContaDoPainelService {
         jdbc.update("delete from notificacao where barbearia_id = ?", b);
         jdbc.update("delete from profissional where barbearia_id = ?", b); // horários dos profissionais vão junto
         jdbc.update("delete from horario_funcionamento where barbearia_id = ?", b);
-        // apagar o usuário apaga junto o dono_barbearia e as sessões (ON DELETE CASCADE)
+        // apagar o usuário apaga junto o dono_barbearia / funcionario e as sessões (ON DELETE CASCADE)
+        jdbc.update("delete from usuario where id in (select id from funcionario where barbearia_id = ?)", b);
         jdbc.update("delete from usuario where id in (select id from dono_barbearia where barbearia_id = ?)", b);
         jdbc.update("delete from barbearia where id = ?", b); // as fotos da galeria vão junto
     }
