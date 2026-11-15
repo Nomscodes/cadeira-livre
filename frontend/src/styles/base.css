@@ -14,7 +14,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
-  font-size: 14px;
+  font-size: var(--fs-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -22,17 +22,19 @@ body {
 #root { min-height: inherit; display: flex; flex-direction: column; }
 
 h1, h2, h3, h4 {
-  font-family: var(--font-display);
+  font-family: var(--font-body);
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
   line-height: 1.25;
   margin: 0 0 0.5em;
   color: var(--c-ink);
 }
-h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.4rem); }
-h2 { font-size: clamp(1.25rem, 1rem + 1vw, 1.6rem); }
-h3 { font-size: 1.15rem; }
-h4 { font-size: 1rem; color: var(--c-ink-strong); }
+/* DM Serif Display existe so no peso 400: h1 e h2 usam peso normal (sem negrito sintetico) */
+h1, h2 { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.005em; }
+h1 { font-size: var(--fs-h1); }
+h2 { font-size: var(--fs-h2); }
+h3 { font-size: var(--fs-lg); }
+h4 { font-size: var(--fs-base); color: var(--c-ink-strong); }
 p { margin: 0 0 1em; }
 
 a { color: inherit; }
@@ -62,7 +64,7 @@ button { font-family: inherit; }
 .skip-link:focus { top: calc(var(--safe-top) + 8px); }
 
 .hint {
-  font-size: 10.5px;
+  font-size: var(--fs-label);
   color: var(--label);
   line-height: 1.45;
 }

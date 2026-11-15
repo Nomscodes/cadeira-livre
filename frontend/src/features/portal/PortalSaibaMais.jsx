@@ -11,7 +11,7 @@ export default function PortalSaibaMais() {
   return (
     <div className="sub-page wide">
       <h3 style={{ marginTop: 0 }}>Sobre nós</h3>
-      <p style={{ fontSize: 13, maxWidth: '72ch' }}>{salao.sobre || 'Este salão ainda não escreveu uma apresentação.'}</p>
+      <p style={{ fontSize: 'var(--fs-base)', maxWidth: '72ch' }}>{salao.sobre || 'Este salão ainda não escreveu uma apresentação.'}</p>
 
       <div className="info-grid">
         <div className="info-item"><span>{salao.atendimento === 'domicilio' ? 'atendimento' : 'localização'}</span><b>{salao.atendimento === 'domicilio' ? 'Esse profissional atende na sua casa!' : salao.endereco || 'não informada'}</b></div>
