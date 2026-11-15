@@ -10,6 +10,7 @@ const TIPOS_CLIENTE = {
   HORARIO_APROVADO: 'confirmado',
   HORARIO_RECUSADO: 'não aceito',
   ATENDIMENTO_CONCLUIDO: 'avaliação',
+  PEDIDO_AVALIACAO: 'avaliação',
   LEMBRETE_CLIENTE: 'lembrete',
 }
 
@@ -43,8 +44,9 @@ export default function ClienteNotificationBell() {
       setData((l) => (l || []).map((x) => (x.id === n.id ? { ...x, lida: true } : x)))
       try { await api.post(`/cliente/notificacoes/${n.id}/lida`, {}, { as: 'cliente' }) } catch { /* mantem como lida na tela */ }
     }
-    // atendimento concluido leva direto para a avaliacao; os outros, para o historico
-    navigate(n.tipo === 'ATENDIMENTO_CONCLUIDO' ? `/avaliar/${n.agendamentoId}` : '/meus-agendamentos')
+    // atendimento concluido e pedido de avaliacao levam direto para a avaliacao; os outros, para o historico
+    const avaliar = n.tipo === 'ATENDIMENTO_CONCLUIDO' || n.tipo === 'PEDIDO_AVALIACAO'
+    navigate(avaliar ? `/avaliar/${n.agendamentoId}` : '/meus-agendamentos')
   }
 
   return (

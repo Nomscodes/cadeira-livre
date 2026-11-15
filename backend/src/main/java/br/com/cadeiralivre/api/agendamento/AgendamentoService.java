@@ -192,6 +192,8 @@ public class AgendamentoService {
         a.setStatus(StatusAgendamento.CONCLUIDO);
         auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_CONCLUIDO, detalheParaAuditoria(a));
         notificacaoService.paraCliente(a, TipoNotificacao.ATENDIMENTO_CONCLUIDO);
+        // o dono também recebe, com o botão "Pedir avaliação ao cliente"
+        notificacaoService.paraDono(a, TipoNotificacao.CONCLUIDO_PARA_DONO);
         return AgendamentoResponse.de(a);
     }
 
