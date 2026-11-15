@@ -24,6 +24,13 @@ public final class UsuarioLogado {
         return ehCliente ? UUID.fromString(auth.getName()) : null;
     }
 
+    /** true quando quem está logado é um funcionário (entrou com o código de convite). */
+    public static boolean ehFuncionario() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(papel -> "ROLE_FUNCIONARIO".equals(papel.getAuthority()));
+    }
+
     /** Id de quem está logado (qualquer papel), ou null se ninguém estiver logado. */
     public static UUID usuarioId() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
