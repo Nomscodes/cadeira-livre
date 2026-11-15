@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import br.com.cadeiralivre.api.auth.dto.CadastroClienteRequest;
 import br.com.cadeiralivre.api.auth.dto.CadastroDonoRequest;
+import br.com.cadeiralivre.api.auth.dto.ConviteRequest;
 import br.com.cadeiralivre.api.auth.dto.LoginRequest;
 import br.com.cadeiralivre.api.auth.dto.SessaoResponse;
 import jakarta.validation.Valid;
@@ -38,6 +39,12 @@ public class AuthController {
     @PostMapping("/cadastro")
     public SessaoResponse cadastrarDono(@Valid @RequestBody CadastroDonoRequest req) {
         return authService.cadastrarDono(req);
+    }
+
+    /** Funcionário cria a conta com o código de convite que o responsável do salão passou. */
+    @PostMapping("/convite")
+    public SessaoResponse aceitarConvite(@Valid @RequestBody ConviteRequest req) {
+        return authService.aceitarConvite(req);
     }
 
     /** Cadastro de cliente (RF01). */

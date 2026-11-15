@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.cadeiralivre.api.auth.dto.CadastroClienteRequest;
 import br.com.cadeiralivre.api.auth.dto.CadastroDonoRequest;
+import br.com.cadeiralivre.api.auth.dto.ConviteRequest;
 import br.com.cadeiralivre.api.auth.dto.LoginRequest;
 import br.com.cadeiralivre.api.auth.dto.SessaoResponse;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
@@ -26,6 +27,7 @@ import br.com.cadeiralivre.api.security.SessaoService;
 import br.com.cadeiralivre.api.security.UsuarioLogado;
 import br.com.cadeiralivre.api.usuario.Cliente;
 import br.com.cadeiralivre.api.usuario.DonoBarbearia;
+import br.com.cadeiralivre.api.usuario.Funcionario;
 import br.com.cadeiralivre.api.usuario.Usuario;
 import br.com.cadeiralivre.api.usuario.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
@@ -51,7 +53,39 @@ public class AuthService {
         Usuario usuario = usuarioRepository.findByEmailHash(hashDoEmail(req.email()))
                 .filter(u -> passwordEncoder.matches(req.senha(), u.getSenhaHash()))
                 .orElseThrow(() -> ApiException.naoAutorizado("E-mail ou senha incorretos."));
+        // funcionário removido da equipe pelo responsável não entra mais
+        if (usuario instanceof Funcionario) {
+            boolean ativo = profissionalRepository.findByUsuarioId(usuario.getId())
+                    .map(Profissional::isAtivo).orElse(false);
+            if (!ativo) throw ApiException.naoAutorizado("Seu acesso foi removido pelo responsável do salão.");
+        }
         return sessao(usuario);
+    }
+
+    /**
+     * O funcionário cria a conta com o código de convite: a conta fica ligada ao profissional
+     * e o código é apagado (só pode ser usado uma vez). O nome é o do cadastro feito pelo dono.
+     */
+    @Transactional
+    public SessaoResponse aceitarConvite(ConviteRequest req) {
+        Profissional profissional = profissionalRepository.findByCodigoConvite(req.codigo().trim().toUpperCase())
+                .filter(p -> p.isAtivo() && p.getUsuario() == null)
+                .orElseThrow(() -> ApiException.invalido("Código de convite inválido ou já usado."));
+        String emailHash = hashDoEmail(req.email());
+        validarEmailUnico(emailHash);
+
+        Funcionario funcionario = new Funcionario();
+        funcionario.setNome(profissional.getNome());
+        funcionario.setEmail(normalizar(req.email()));
+        funcionario.setEmailHash(emailHash);
+        funcionario.setSenhaHash(passwordEncoder.encode(req.senha()));
+        funcionario.setAceiteTermosEm(Instant.now(clock));
+        funcionario.setBarbearia(profissional.getBarbearia());
+        usuarioRepository.save(funcionario);
+
+        profissional.setUsuario(funcionario);
+        profissional.setCodigoConvite(null);
+        return sessao(funcionario);
     }
 
     /** RF05: encerra a sessão do token usado na requisição. A partir daí esse token não vale mais. */
@@ -126,7 +160,10 @@ public class AuthService {
 
     // abre a sessão no banco e gera o token com o id dela
     private SessaoResponse sessao(Usuario u) {
-        UUID barbeariaId = u instanceof DonoBarbearia d ? d.getBarbearia().getId() : null;
+        // o dono e o funcionário trabalham numa barbearia (vai no token); o cliente não
+        UUID barbeariaId = null;
+        if (u instanceof DonoBarbearia d) barbeariaId = d.getBarbearia().getId();
+        if (u instanceof Funcionario f) barbeariaId = f.getBarbearia().getId();
         // o painel usa o profissional da conta para marcar "(você)" nas listas; o cliente não tem
         UUID profissionalId = barbeariaId == null ? null : profissionalRepository.findByUsuarioId(u.getId())
                 .map(Profissional::getId).orElse(null);

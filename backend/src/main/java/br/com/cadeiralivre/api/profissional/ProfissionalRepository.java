@@ -24,6 +24,9 @@ public interface ProfissionalRepository extends JpaRepository<Profissional, UUID
     // o profissional ligado a uma conta (o dono ou um funcionário)
     Optional<Profissional> findByUsuarioId(UUID usuarioId);
 
+    // o funcionário cria a conta com o código que o dono recebeu ao cadastrar o profissional
+    Optional<Profissional> findByCodigoConvite(String codigoConvite);
+
     // profissionais ativos, que atendem clientes e fazem o serviço escolhido pelo cliente
     @Query("""
             select p from Profissional p join p.servicos s
