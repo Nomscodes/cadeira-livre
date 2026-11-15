@@ -34,6 +34,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 
 import br.com.cadeiralivre.api.auth.dto.CadastroClienteRequest;
 import br.com.cadeiralivre.api.auth.dto.CadastroDonoRequest;
+import br.com.cadeiralivre.api.auth.dto.ConviteRequest;
 import br.com.cadeiralivre.api.auth.dto.LoginRequest;
 import br.com.cadeiralivre.api.auth.dto.SessaoResponse;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
@@ -49,6 +50,7 @@ import br.com.cadeiralivre.api.security.Sessao;
 import br.com.cadeiralivre.api.security.SessaoService;
 import br.com.cadeiralivre.api.usuario.Cliente;
 import br.com.cadeiralivre.api.usuario.DonoBarbearia;
+import br.com.cadeiralivre.api.usuario.Funcionario;
 import br.com.cadeiralivre.api.usuario.Papel;
 import br.com.cadeiralivre.api.usuario.Usuario;
 import br.com.cadeiralivre.api.usuario.UsuarioRepository;
@@ -280,6 +282,85 @@ class AuthServiceTest {
         assertEquals(401, erro.getStatus().value());
     }
 
+    // ---------- convite do funcionário ----------
+
+    @Test
+    void conviteCriaContaDeFuncionarioLigadaAoProfissionalEApagaOCodigo() {
+        Profissional naoki = profissionalConvidado("GZVHJ2");
+        when(profissionalRepository.findByCodigoConvite("GZVHJ2")).thenReturn(Optional.of(naoki));
+        when(usuarioRepository.existsByEmailHash(criptografia.hash("naoki@teste.com"))).thenReturn(false);
+        when(passwordEncoder.encode("12345678")).thenReturn("hash-novo");
+        when(profissionalRepository.findByUsuarioId(any())).thenReturn(Optional.of(naoki));
+        when(sessaoService.abrir(any())).thenReturn(sessaoAberta);
+
+        // o código vem com espaço e minúsculas: o service ajeita
+        SessaoResponse sessao = authService.aceitarConvite(new ConviteRequest(" gzvhj2 ", "Naoki@Teste.com", "12345678", true));
+
+        ArgumentCaptor<Usuario> salvo = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarioRepository).save(salvo.capture());
+        Funcionario funcionario = (Funcionario) salvo.getValue();
+        assertEquals("Naoki Barbeiro - Gabriel Naoki", funcionario.getNome());
+        assertEquals("naoki@teste.com", funcionario.getEmail());
+        assertEquals("hash-novo", funcionario.getSenhaHash());
+        assertEquals(agora, funcionario.getAceiteTermosEm());
+        assertSame(naoki.getBarbearia(), funcionario.getBarbearia());
+        assertSame(funcionario, naoki.getUsuario());
+        assertNull(naoki.getCodigoConvite());
+        assertEquals("FUNCIONARIO", sessao.usuario().papel());
+        assertEquals(naoki.getBarbearia().getId(), sessao.usuario().barbeariaId());
+        assertEquals(naoki.getId(), sessao.usuario().profissionalId());
+        verify(jwtService).gerar(any(), eq(Papel.FUNCIONARIO), eq(naoki.getBarbearia().getId()), eq(sessaoAberta.getId()));
+    }
+
+    @Test
+    void codigoJaUsadoOuInexistenteDevolve422() {
+        Profissional jaTemConta = profissionalConvidado("ABC234");
+        jaTemConta.setUsuario(new Funcionario());
+        when(profissionalRepository.findByCodigoConvite("ABC234")).thenReturn(Optional.of(jaTemConta));
+        when(profissionalRepository.findByCodigoConvite("ZZZZZZ")).thenReturn(Optional.empty());
+
+        ApiException usado = assertThrows(ApiException.class,
+                () -> authService.aceitarConvite(new ConviteRequest("ABC234", "a@teste.com", "12345678", true)));
+        ApiException inexistente = assertThrows(ApiException.class,
+                () -> authService.aceitarConvite(new ConviteRequest("ZZZZZZ", "a@teste.com", "12345678", true)));
+
+        assertEquals(422, usado.getStatus().value());
+        assertEquals("Código de convite inválido ou já usado.", inexistente.getMessage());
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    @Test
+    void conviteComEmailJaCadastradoDevolve409() {
+        Profissional naoki = profissionalConvidado("GZVHJ2");
+        when(profissionalRepository.findByCodigoConvite("GZVHJ2")).thenReturn(Optional.of(naoki));
+        when(usuarioRepository.existsByEmailHash(criptografia.hash("gabriel@teste.com"))).thenReturn(true);
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> authService.aceitarConvite(new ConviteRequest("GZVHJ2", "gabriel@teste.com", "12345678", true)));
+
+        assertEquals(409, erro.getStatus().value());
+        assertEquals("GZVHJ2", naoki.getCodigoConvite());
+    }
+
+    @Test
+    void funcionarioRemovidoDaEquipeNaoConsegueEntrar() {
+        Funcionario funcionario = new Funcionario();
+        funcionario.setId(UUID.randomUUID());
+        funcionario.setSenhaHash("hash-salvo");
+        Profissional desativado = profissionalConvidado(null);
+        desativado.setAtivo(false);
+        when(usuarioRepository.findByEmailHash(criptografia.hash("naoki@teste.com"))).thenReturn(Optional.of(funcionario));
+        when(passwordEncoder.matches("12345678", "hash-salvo")).thenReturn(true);
+        when(profissionalRepository.findByUsuarioId(funcionario.getId())).thenReturn(Optional.of(desativado));
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> authService.login(new LoginRequest("naoki@teste.com", "12345678")));
+
+        assertEquals(401, erro.getStatus().value());
+        assertEquals("Seu acesso foi removido pelo responsável do salão.", erro.getMessage());
+        verify(sessaoService, never()).abrir(any());
+    }
+
     @Test
     void logoutEncerraASessaoDoTokenUsado() {
         UUID gabrielId = UUID.randomUUID();
@@ -305,6 +386,19 @@ class AuthServiceTest {
                 usuarioId.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_CLIENTE")));
         auth.setDetails(sessaoId);
         SecurityContextHolder.getContext().setAuthentication(auth);
+    }
+
+    // profissional cadastrado pelo dono, ainda sem conta, com o código de convite
+    private Profissional profissionalConvidado(String codigo) {
+        Barbearia barbearia = new Barbearia();
+        barbearia.setId(UUID.randomUUID());
+        Profissional p = new Profissional();
+        p.setId(UUID.randomUUID());
+        p.setNome("Naoki Barbeiro - Gabriel Naoki");
+        p.setBarbearia(barbearia);
+        p.setAtivo(true);
+        p.setCodigoConvite(codigo);
+        return p;
     }
 
     private CadastroClienteRequest novoCliente(String email) {
