@@ -11,6 +11,8 @@ public enum TipoNotificacao {
     // entre a equipe (texto livre, com remetente)
     AVISO_EQUIPE("Aviso do responsável"),
     ALERTA_FUNCIONARIO("Alerta de funcionário"),
+    // para o profissional com conta de funcionário: o dono aprovou um atendimento com ele
+    ATENDIMENTO_NA_AGENDA("Novo atendimento na sua agenda"),
 
     // para o cliente
     HORARIO_APROVADO("Horário confirmado"),

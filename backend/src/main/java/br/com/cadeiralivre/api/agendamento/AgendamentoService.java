@@ -166,6 +166,8 @@ public class AgendamentoService {
         a.setStatus(StatusAgendamento.APROVADO);
         auditoriaService.registrar(AcaoAuditoria.AGENDAMENTO_APROVADO, detalheParaAuditoria(a));
         notificacaoService.paraCliente(a, TipoNotificacao.HORARIO_APROVADO);
+        // os profissionais do atendimento que têm conta veem o novo horário no sino deles
+        notificacaoService.paraEquipe(a, TipoNotificacao.ATENDIMENTO_NA_AGENDA);
         return AgendamentoResponse.de(a);
     }
 

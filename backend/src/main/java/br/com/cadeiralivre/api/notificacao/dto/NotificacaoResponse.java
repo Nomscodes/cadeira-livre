@@ -44,6 +44,7 @@ public record NotificacaoResponse(UUID id, TipoNotificacao tipo, String titulo, 
                     + " com " + profissional + ". Toque para avaliar.";
             // aviso do dono e alerta do funcionário: o texto foi escrito por quem mandou
             case AVISO_EQUIPE, ALERTA_FUNCIONARIO -> n.getTexto();
+            case ATENDIMENTO_NA_AGENDA -> cliente + " marcou " + servico + " com você em " + dia + " às " + hora + ".";
             case LEMBRETE_CLIENTE -> servico + " com " + profissional + " em " + dia + " às " + hora
                     + ", na " + a.getBarbearia().getNomeFantasia() + ".";
         };

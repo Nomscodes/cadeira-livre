@@ -58,6 +58,7 @@ public record NotificacaoDaEquipeResponse(UUID id, String tipo, String titulo, S
             case CONCLUIDO_PARA_DONO -> "avaliacao";
             case ALERTA_FUNCIONARIO -> "alerta";
             case AVISO_EQUIPE -> "aviso";
+            case ATENDIMENTO_NA_AGENDA -> "agendamento";
             default -> tipo.name().toLowerCase();
         };
     }
