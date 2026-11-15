@@ -146,6 +146,35 @@ class NotificacaoServiceTest {
     }
 
     @Test
+    void textoUsaONomeSocialDoProfissionalQuandoTiver() {
+        agendamento.getProfissional().setNomeSocial("Diego");
+
+        NotificacaoResponse r = NotificacaoResponse.de(notificacao(TipoNotificacao.HORARIO_APROVADO));
+
+        assertEquals("A barbearia confirmou seu Corte com Diego em 12/11 às 14:00.", r.texto());
+    }
+
+    @Test
+    void textoComVariosItensMostraTodosOsServicosEProfissionais() {
+        // combo com o Rafael + sobrancelha com o Lucas: o texto não pode falar só do serviço principal
+        Profissional rafael = profissionalComConta("Rafael Lima", null);
+        rafael.setNomeSocial("Rafael");
+        Profissional lucas = profissionalComConta("Lucas Pereira", null);
+        lucas.setNomeSocial("Lucas");
+        AgendamentoItem combo = item(rafael);
+        combo.setNome("Corte + Barba");
+        AgendamentoItem sobrancelha = item(lucas);
+        sobrancelha.setNome("Sobrancelha");
+        agendamento.adicionarItem(combo);
+        agendamento.adicionarItem(sobrancelha);
+
+        NotificacaoResponse r = NotificacaoResponse.de(notificacao(TipoNotificacao.NOVO_AGENDAMENTO));
+
+        assertEquals("Gabriel Naoki pediu Corte + Barba + Sobrancelha com Rafael, Lucas em 12/11 às 14:00."
+                + " Aprove ou recuse no painel.", r.texto());
+    }
+
+    @Test
     void atendimentoNaAgendaMostraOClienteEOHorario() {
         Notificacao n = notificacao(TipoNotificacao.ATENDIMENTO_NA_AGENDA);
 
