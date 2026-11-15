@@ -44,6 +44,14 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, UUID> 
     List<Agendamento> findAllByBarbeariaIdAndDataBetweenAndStatus(UUID barbeariaId, LocalDate inicio, LocalDate fim,
                                                                 StatusAgendamento status);
 
+    /** Agenda do funcionário: os agendamentos em que o profissional aparece em algum item (de todas as datas). */
+    @Query("""
+            select distinct a from Agendamento a join a.itens i
+            where i.profissional.id = :profissionalId
+            order by a.data, a.horaInicio
+            """)
+    List<Agendamento> doProfissional(@Param("profissionalId") UUID profissionalId);
+
     /**
      * RF21: o profissional já tem agendamento no status dado que sobreponha o intervalo [inicio, fim)?
      * Olha os itens: ele pode estar em qualquer item de um agendamento, não só no principal.
