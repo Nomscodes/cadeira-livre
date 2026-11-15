@@ -31,13 +31,13 @@ describe('autenticacao', () => {
   it('dono e cliente entram e recebem a sessao no formato do backend', async () => {
     const dono = await api.post('/auth/login', { email: 'admin', senha: 'admin' })
     expect(dono.token).toEqual(expect.any(String))
-    expect(dono.usuario).toEqual({ id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1' })
+    expect(dono.usuario).toEqual({ id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' })
     const gabriel = await api.post('/auth/login', { email: 'cliente@teste.com', senha: '12345678' })
     expect(gabriel.usuario).toEqual({ id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null })
   })
   it('funcionario entra pela mesma rota e recebe o papel FUNCIONARIO', async () => {
     const f = await api.post('/auth/login', { email: 'func@teste.com', senha: 'func' })
-    expect(f.usuario).toEqual({ id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1' })
+    expect(f.usuario).toEqual({ id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1', profissionalId: 'p1' })
     expect((await api.post('/auth/login', { email: 'func', senha: 'func' })).usuario.papel).toBe('FUNCIONARIO')
   })
   it('recusa senha errada', async () => {
@@ -320,6 +320,9 @@ describe('notificacoes', () => {
     await expect(api.post('/notificacoes/n1/acao', { acao: 'avaliacao' }, { as: 'staff' })).rejects.toMatchObject({ status: 422 })
     await api.post('/notificacoes/n3/acao', { acao: 'avaliacao' }, { as: 'staff' })
     expect((await api.get('/notificacoes', { as: 'staff' })).find((n) => n.id === 'n3').acoes[0].usada).toBe(true)
+    // igual ao backend: o pedido chega no sino do cliente e nao pode ser repetido
+    expect(getDb().notificacoesCliente.filter((n) => n.agendamentoId === 'a6' && n.tipo === 'PEDIDO_AVALIACAO')).toHaveLength(1)
+    await expect(api.post('/notificacoes/n3/acao', { acao: 'avaliacao' }, { as: 'staff' })).rejects.toMatchObject({ status: 422 })
   })
   it('funcionario nao dispara acoes', async () => {
     funcionario()
