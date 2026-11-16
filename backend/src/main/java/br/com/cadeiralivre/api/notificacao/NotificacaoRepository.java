@@ -1,0 +1,32 @@
+package br.com.cadeiralivre.api.notificacao;
+
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface NotificacaoRepository extends JpaRepository<Notificacao, UUID> {
+
+    // as 30 mais recentes do dono (sem os avisos mandados para os profissionais), já com os dados do agendamento
+    @EntityGraph(attributePaths = {"agendamento", "agendamento.servico", "agendamento.profissional", "agendamento.barbearia"})
+    List<Notificacao> findTop30ByBarbeariaIdAndProfissionalIsNullOrderByCriadaEmDesc(UUID barbeariaId);
+
+    @EntityGraph(attributePaths = {"agendamento", "agendamento.servico", "agendamento.profissional", "agendamento.barbearia"})
+    List<Notificacao> findTop30ByClienteIdOrderByCriadaEmDesc(UUID clienteId);
+
+    // sino do funcionário: só o que foi mandado para o profissional dele
+    @EntityGraph(attributePaths = {"agendamento", "agendamento.servico", "agendamento.profissional", "agendamento.barbearia"})
+    List<Notificacao> findTop30ByProfissionalIdOrderByCriadaEmDesc(UUID profissionalId);
+
+    // cada um só mexe nas notificações que são dele
+    Optional<Notificacao> findByIdAndBarbeariaId(UUID id, UUID barbeariaId);
+
+    Optional<Notificacao> findByIdAndProfissionalId(UUID id, UUID profissionalId);
+
+    Optional<Notificacao> findByIdAndClienteId(UUID id, UUID clienteId);
+
+    // para não criar o mesmo lembrete duas vezes
+    boolean existsByAgendamentoIdAndTipo(UUID agendamentoId, TipoNotificacao tipo);
+}

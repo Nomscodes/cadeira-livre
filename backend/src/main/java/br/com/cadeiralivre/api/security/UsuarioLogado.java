@@ -1,0 +1,51 @@
+package br.com.cadeiralivre.api.security;
+
+import java.util.UUID;
+
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+/**
+ * Diz quem está logado na requisição atual.
+ * O JwtAuthenticationFilter guarda o id do usuário (subject do token) como "nome" da autenticação
+ * e o id da sessão do token como "detalhes".
+ */
+public final class UsuarioLogado {
+
+    private UsuarioLogado() {
+    }
+
+    /** Id do cliente logado, ou null se ninguém estiver logado (ou se quem está logado não for cliente). */
+    public static UUID clienteId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return null;
+        boolean ehCliente = auth.getAuthorities().stream()
+                .anyMatch(papel -> "ROLE_CLIENTE".equals(papel.getAuthority()));
+        return ehCliente ? UUID.fromString(auth.getName()) : null;
+    }
+
+    /** true quando quem está logado é um funcionário (entrou com o código de convite). */
+    public static boolean ehFuncionario() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(papel -> "ROLE_FUNCIONARIO".equals(papel.getAuthority()));
+    }
+
+    /** Id de quem está logado (qualquer papel), ou null se ninguém estiver logado. */
+    public static UUID usuarioId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getName() == null) return null;
+        try {
+            return UUID.fromString(auth.getName());
+        } catch (IllegalArgumentException e) {
+            return null; // usuário anônimo do Spring ("anonymousUser")
+        }
+    }
+
+    /** Id da sessão do token usado na requisição (RF05), ou null se ninguém estiver logado. */
+    public static UUID sessaoId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return null;
+        return auth.getDetails() instanceof UUID sessaoId ? sessaoId : null;
+    }
+}

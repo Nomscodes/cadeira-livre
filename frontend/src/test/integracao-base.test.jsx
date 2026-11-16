@@ -1,0 +1,217 @@
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import StatusChip from '../components/ui/StatusChip'
+import { hhmm } from '../lib/dates'
+import { STATUS, grupoDoStatus } from '../lib/status'
+
+/** Resposta falsa do backend, no formato que o fetch devolve. */
+const resposta = (status, corpo) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => {
+    if (corpo === undefined) throw new Error('sem corpo')
+    return corpo
+  },
+})
+
+/** Carrega o http.js apontando para o backend real (sem a API simulada), com um fetch falso no lugar da rede. */
+async function apiReal(fetchFalso) {
+  vi.stubEnv('VITE_USE_MOCK', 'false')
+  vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api')
+  vi.stubGlobal('fetch', fetchFalso)
+  vi.resetModules()
+  const { api } = await import('../lib/http')
+  return api
+}
+
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
+  vi.resetModules()
+})
+
+describe('chamadas ao backend real', () => {
+  it('rota do painel envia o token do dono no cabecalho Authorization', async () => {
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'token-do-gabriel' }))
+    const fetchFalso = vi.fn(async () => resposta(200, []))
+    const api = await apiReal(fetchFalso)
+
+    await api.get('/painel/servicos', { as: 'staff' })
+
+    const [url, opcoes] = fetchFalso.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/painel/servicos')
+    expect(opcoes.method).toBe('GET')
+    expect(opcoes.headers.Authorization).toBe('Bearer token-do-gabriel')
+  })
+
+  it('rota publica nao envia token e monta os parametros da consulta', async () => {
+    const fetchFalso = vi.fn(async () => resposta(200, { profissionais: [] }))
+    const api = await apiReal(fetchFalso)
+
+    await api.get('/saloes/barbearia-teste/disponibilidade', { query: { servicoId: 'abc', data: '2026-11-16', vazio: '' } })
+
+    const [url, opcoes] = fetchFalso.mock.calls[0]
+    expect(url).toBe('http://localhost:8080/api/saloes/barbearia-teste/disponibilidade?servicoId=abc&data=2026-11-16')
+    expect(opcoes.headers.Authorization).toBeUndefined()
+  })
+
+  it('envia o corpo em JSON', async () => {
+    const fetchFalso = vi.fn(async () => resposta(200, { token: 't' }))
+    const api = await apiReal(fetchFalso)
+
+    await api.post('/auth/login', { email: 'gabriel@teste.com', senha: '12345678' })
+
+    const [, opcoes] = fetchFalso.mock.calls[0]
+    expect(opcoes.headers['Content-Type']).toBe('application/json')
+    expect(JSON.parse(opcoes.body)).toEqual({ email: 'gabriel@teste.com', senha: '12345678' })
+  })
+
+  it('resposta 204 (sem corpo) devolve null', async () => {
+    const api = await apiReal(vi.fn(async () => resposta(204)))
+
+    expect(await api.post('/auth/logout', undefined, { as: 'staff' })).toBeNull()
+  })
+
+  it('erro do backend vira ApiError com a mensagem e a lista de problemas', async () => {
+    const erro422 = { message: 'Dados inválidos.', problemas: ['nome: não deve estar em branco'] }
+    const api = await apiReal(vi.fn(async () => resposta(422, erro422)))
+
+    const erro = await api.post('/painel/servicos', {}, { as: 'staff' }).catch((e) => e)
+
+    expect(erro.status).toBe(422)
+    expect(erro.message).toBe('Dados inválidos.')
+    expect(erro.details.problemas).toEqual(['nome: não deve estar em branco'])
+  })
+
+  it('401 em rota com login avisa a aplicacao para encerrar a sessao', async () => {
+    const api = await apiReal(vi.fn(async () => resposta(401, { message: 'Faça login para continuar.', problemas: [] })))
+    const avisos = []
+    const ouvir = (e) => avisos.push(e.detail.as)
+    window.addEventListener('cl:unauthorized', ouvir)
+
+    const erro = await api.get('/cliente/agendamentos', { as: 'cliente' }).catch((e) => e)
+    window.removeEventListener('cl:unauthorized', ouvir)
+
+    expect(erro.status).toBe(401)
+    expect(avisos).toEqual(['cliente'])
+  })
+
+  it('servidor fora do ar vira erro com mensagem para o usuario', async () => {
+    const api = await apiReal(vi.fn(async () => { throw new TypeError('Failed to fetch') }))
+
+    const erro = await api.get('/saloes/barbearia-teste').catch((e) => e)
+
+    expect(erro.status).toBe(0)
+    expect(erro.message).toMatch(/Não foi possível conectar ao servidor/)
+  })
+})
+
+describe('formatos do backend', () => {
+  it('hora com segundos e mostrada como HH:mm', () => {
+    expect(hhmm('09:00:00')).toBe('09:00')
+    expect(hhmm('14:30')).toBe('14:30')
+    expect(hhmm(null)).toBe('')
+  })
+
+  it('cada status do agendamento tem o seu rotulo', () => {
+    const rotulos = { PENDENTE: 'pendente', APROVADO: 'aprovado', RECUSADO: 'recusado', CANCELADO: 'cancelado', CONCLUIDO: 'concluído' }
+    // nenhum status do backend pode ficar sem rotulo
+    expect(Object.keys(rotulos).sort()).toEqual(Object.keys(STATUS).sort())
+
+    Object.entries(rotulos).forEach(([status, rotulo]) => {
+      const { unmount } = render(<StatusChip status={STATUS[status]} />)
+      expect(screen.getByText(rotulo)).toBeInTheDocument()
+      unmount()
+    })
+  })
+
+  it('pedido recusado ou cancelado aparece em vermelho e o concluido em verde', () => {
+    const { rerender } = render(<StatusChip status={STATUS.RECUSADO} />)
+    expect(screen.getByText('recusado')).toHaveClass('bad')
+    rerender(<StatusChip status={STATUS.CANCELADO} />)
+    expect(screen.getByText('cancelado')).toHaveClass('bad')
+    rerender(<StatusChip status={STATUS.CONCLUIDO} />)
+    expect(screen.getByText('concluído')).toHaveClass('ok')
+  })
+})
+
+describe('meus agendamentos com os status do backend', () => {
+  it('agrupa os status da V7 (e os da API simulada) para a tela do cliente', () => {
+    expect(grupoDoStatus('PENDENTE')).toBe('confirmado')
+    expect(grupoDoStatus('APROVADO')).toBe('confirmado')
+    expect(grupoDoStatus('CONCLUIDO')).toBe('finalizado')
+    expect(grupoDoStatus('CANCELADO')).toBe('cancelado')
+    expect(grupoDoStatus('RECUSADO')).toBe('cancelado')
+    expect(grupoDoStatus('finalizado')).toBe('finalizado') // nome da API simulada continua valendo
+  })
+
+  it('mostra pendente, recusado e concluido, com cancelar e avaliar nos lugares certos', async () => {
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'token-do-gabriel', usuario: { nome: 'Gabriel Naoki' } }))
+    const salao = { nome: 'Barbearia Naoki', slug: 'barbearia-naoki', temaId: 'verde-escuro', whatsapp: '62999990000' }
+    const base = { profissionais: 'Naoki', valor: 40, avaliado: false, salao, cancelamentoHoras: 4 }
+    const fetchFalso = vi.fn(async () => resposta(200, [
+      { ...base, id: 'a1', status: 'PENDENTE', servicos: 'Corte', data: '2026-11-18', hora: '14:00', podeCancelar: true },
+      { ...base, id: 'a2', status: 'RECUSADO', servicos: 'Barba', data: '2026-11-09', hora: '11:00', podeCancelar: false },
+      { ...base, id: 'a3', status: 'CONCLUIDO', servicos: 'Corte + Barba', data: '2026-11-06', hora: '14:00', podeCancelar: false },
+    ]))
+    await apiReal(fetchFalso)
+    // a tela e os providers são carregados depois do http.js apontar para o backend real
+    const { MemoryRouter } = await import('react-router-dom')
+    const { ToastProvider } = await import('../context/ToastContext')
+    const { default: HistoricoPage } = await import('../features/cliente/HistoricoPage')
+
+    render(<MemoryRouter><ToastProvider><HistoricoPage /></ToastProvider></MemoryRouter>)
+
+    const corte = (await screen.findByRole('heading', { name: 'Corte' })).closest('article')
+    expect(within(corte).getByText('pendente')).toBeInTheDocument()
+    expect(within(corte).getByRole('button', { name: 'cancelar' })).toBeInTheDocument()
+    const barba = screen.getByRole('heading', { name: 'Barba' }).closest('article')
+    expect(within(barba).getByText('recusado')).toBeInTheDocument()
+    expect(within(barba).queryByRole('button', { name: 'cancelar' })).not.toBeInTheDocument()
+    const concluido = screen.getByRole('heading', { name: 'Corte + Barba' }).closest('article')
+    expect(within(concluido).getByText('concluído')).toBeInTheDocument()
+    expect(within(concluido).getByRole('link', { name: 'avaliar' })).toHaveAttribute('href', '/avaliar/a3')
+    expect(fetchFalso.mock.calls[0][0]).toBe('http://localhost:8080/api/cliente/agendamentos')
+  })
+})
+
+describe('agendamentos do painel com os status do backend', () => {
+  it('o dono aprova um pedido pendente pelo detalhe e a lista recarrega', async () => {
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'token-do-dono', usuario: { nome: 'Gabriel Naoki', papel: 'DONO' } }))
+    const base = { whatsapp: '62988887777', profissionais: 'Naoki', profissionalIds: ['p1'], valor: 40, encaminhar: [] }
+    const lista = [
+      { ...base, id: 'a1', cliente: 'Gabriel Naoki', servicos: 'Corte', data: '2026-11-18', hora: '14:00', status: 'PENDENTE' },
+      { ...base, id: 'a2', cliente: 'Cliente Aprovado', servicos: 'Barba', data: '2026-11-19', hora: '10:00', status: 'APROVADO' },
+      { ...base, id: 'a3', cliente: 'Cliente Recusado', servicos: 'Corte', data: '2026-11-09', hora: '11:00', status: 'RECUSADO' },
+    ]
+    const fetchFalso = vi.fn(async (url, opcoes) => resposta(200, opcoes.method === 'POST' ? { ...lista[0], status: 'APROVADO' } : lista))
+    await apiReal(fetchFalso)
+    const { MemoryRouter } = await import('react-router-dom')
+    const { ToastProvider } = await import('../context/ToastContext')
+    const { default: AgendamentosPage } = await import('../features/painel/AgendamentosPage')
+    const user = userEvent.setup()
+
+    render(<MemoryRouter><ToastProvider><AgendamentosPage /></ToastProvider></MemoryRouter>)
+
+    // o recusado fica junto dos cancelados; o pendente e o aprovado, nos confirmados
+    expect(await screen.findByText('pendente')).toBeInTheDocument()
+    expect(screen.getByText('aprovado')).toBeInTheDocument()
+    expect(screen.getByText('recusado')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Cliente Aprovado'))
+    expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Concluir atendimento' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Fechar janela' }))
+
+    await user.click(screen.getByText('Gabriel Naoki'))
+    const detalhe = screen.getByRole('dialog')
+    expect(within(detalhe).getByRole('button', { name: 'Recusar' })).toBeInTheDocument()
+    await user.click(within(detalhe).getByRole('button', { name: 'Aprovar' }))
+
+    await waitFor(() => expect(fetchFalso).toHaveBeenCalledWith(
+      'http://localhost:8080/api/painel/agendamentos/a1/aprovar', expect.objectContaining({ method: 'POST' })))
+    expect(await screen.findByText('Agendamento aprovado. O cliente foi avisado.')).toBeInTheDocument()
+    // depois da ação, a lista é buscada de novo
+    await waitFor(() => expect(fetchFalso.mock.calls.filter(([, o]) => o.method === 'GET').length).toBe(2))
+  })
+})
