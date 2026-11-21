@@ -206,9 +206,9 @@ Criadas pelo script `database/povoar-pela-api.mjs`. Todas usam a senha `12345678
 
 ## Testes
 
-| Parte | Comando | Resultado na v0.9.0 |
+| Parte | Comando | Resultado atual |
 |---|---|---|
-| Backend | `cd backend` e `mvnw test` | 311 testes passando |
+| Backend | `cd backend` e `mvnw test` | 312 testes: 311 passam e 1 está desativado |
 | Frontend | `cd frontend` e `npm test` | 124 testes passando |
 | Build do frontend | `cd frontend` e `npm run build` | sem erros |
 
@@ -217,6 +217,82 @@ Os testes do frontend rodam sempre com a API simulada, sem precisar do backend.
 A meta da especificação (RNF10) é cobertura de testes unitários **superior a 80%** do código crítico. Na v0.9.0, o backend tem **89%** de cobertura de instruções e **85%** de ramificações, medidas pelo JaCoCo (relatório em `backend/target/site/jacoco/index.html` depois do `mvnw test`).
 
 > O JaCoCo não gera o relatório em pastas com acento no caminho. Nesse caso, use uma letra de unidade temporária, por exemplo `subst X: "C:\caminho\do\cadeira-livre"`, e rode os testes a partir de `X:`.
+
+### Como instalar e rodar os testes
+
+É preciso ter o **JDK 21** e o **Node.js 20.19+**. O **Docker Desktop** só é necessário para o teste de integração. Não precisa deixar a API, o frontend ou o banco local rodando.
+
+**Backend** (o Maven Wrapper baixa as dependências na primeira execução):
+
+```bash
+cd backend
+
+# todos os testes
+mvnw clean test
+
+# só os testes unitários do agendamento do cliente
+mvnw clean test "-Dtest=ClienteAgendamentoServiceTest"
+
+# só os três casos unitários da N2 (U-01, U-02 e U-03)
+mvnw clean test "-Dtest=ClienteAgendamentoServiceTest#cancelarPendenteMudaParaCancelado+faltandoMenosDe1HoraNaoDaPraCancelar+faltandoExatamente1HoraAindaDaPraCancelar"
+
+# só o teste de integração C-01 (com o Docker Desktop aberto)
+mvnw clean test "-Dtest=CadastroClienteIntegracaoTest"
+
+# só uma classe de teste (troque pelo nome da classe que quiser)
+mvnw clean test "-Dtest=AuthServiceTest"
+```
+
+No Linux ou macOS, use `./mvnw` em vez de `mvnw`. Os testes do backend ficam em `backend/src/test/java`, separados por funcionalidade (`auth`, `agendamento`, `barbearia`, `horario`, `notificacao` e outras).
+
+| Execução | Resultado esperado |
+|---|---|
+| Todos os testes, com Docker | `Tests run: 312, Failures: 0, Errors: 0, Skipped: 1` |
+| Todos os testes, sem Docker | `Tests run: 312, Failures: 0, Errors: 0, Skipped: 2` |
+| Casos U-01, U-02 e U-03 | `Tests run: 3, Failures: 0, Errors: 0, Skipped: 0` |
+| Unitários do agendamento do cliente | `Tests run: 11, Failures: 0, Errors: 0, Skipped: 0` |
+| Integração C-01, com Docker | `Tests run: 1, Failures: 0, Errors: 0, Skipped: 0` |
+| Integração C-01, sem Docker | `Tests run: 1, Failures: 0, Errors: 0, Skipped: 1` |
+
+Todas as execuções terminam com `BUILD SUCCESS`. O teste desativado da suíte é o `CadeiraLivreApiApplicationTests`. Sem Docker, os 2 pulados são esse teste e o C-01.
+
+O C-01 cria o próprio PostgreSQL 16 em um container temporário, aplica as migrations e testa cadastro, login, consulta da conta e a proteção dos dados no banco. Ele não usa o banco local da porta 5433, e o container é removido no fim. Sem Docker, o teste é pulado e o build continua passando.
+
+**Casos da avaliação N2 (Teste de Software):**
+
+| Caso | Tipo | Regra | Classe / método |
+|---|---|---|---|
+| U-01 | Unitário (resultado esperado) | Cancelar um agendamento pendente muda o status para cancelado e avisa o dono | `ClienteAgendamentoServiceTest#cancelarPendenteMudaParaCancelado` |
+| U-02 | Unitário (erro) | Faltando menos de 1 hora, o cancelamento é recusado (422) e o status não muda | `ClienteAgendamentoServiceTest#faltandoMenosDe1HoraNaoDaPraCancelar` |
+| U-03 | Unitário (limite) | Faltando exatamente 1 hora, ainda dá para cancelar | `ClienteAgendamentoServiceTest#faltandoExatamente1HoraAindaDaPraCancelar` |
+| C-01 | Integração | Cadastro, login e consulta da conta com a API e o PostgreSQL reais; no banco, e-mail cifrado e senha em BCrypt | `CadastroClienteIntegracaoTest` |
+
+**Frontend (Vitest e Testing Library):**
+
+```bash
+cd frontend
+npm install
+
+# todos os testes
+npm test
+
+# só um arquivo de teste
+npx vitest run src/test/api.test.js
+
+# build de produção
+npm run build
+```
+
+| Arquivo em `frontend/src/test` | O que testa | Testes |
+|---|---|---|
+| `api.test.js` | Regras da API simulada: autenticação, agendamento, horários, painel e notificações | 50 |
+| `flows.test.jsx` | Fluxos de tela: login, agendamento, painel, área do cliente e funcionário | 53 |
+| `integracao-base.test.jsx` | Contrato com o backend: chamadas, formatos e status dos agendamentos | 13 |
+| `protobar.test.jsx` | Barra de protótipo | 3 |
+| `tema.test.jsx` | Tema do salão a partir da cor do backend | 5 |
+| **Total** | | **124** |
+
+Resultado esperado: `Test Files 5 passed (5)`, `Tests 124 passed (124)` e o build sem erros.
 
 ## Estrutura do repositório
 
