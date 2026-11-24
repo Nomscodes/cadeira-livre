@@ -62,12 +62,12 @@ export default function PortalLayout() {
                   {menu ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
                 </button>
                 <nav id="nav-portal" className={`nav-client${menu ? ' open' : ''}`} aria-label="Portal do salão" onClick={() => setMenu(false)}>
-                  <NavLink to={base} end>início</NavLink>
-                  <NavLink to={`${base}/agendar`}>agendamento</NavLink>
-                  <NavLink to={`${base}/saiba-mais`}>saiba mais</NavLink>
+                  <NavLink to={base} end>Início</NavLink>
+                  <NavLink to={`${base}/agendar`}>Agendamento</NavLink>
+                  <NavLink to={`${base}/saiba-mais`}>Saiba Mais</NavLink>
                   {autenticado
-                    ? <NavLink to="/meus-agendamentos">meus agendamentos</NavLink>
-                    : <Link to="/acesso" state={{ voltar: pathname }}>entrar</Link>}
+                    ? <NavLink to="/meus-agendamentos">Meus Agendamentos</NavLink>
+                    : <Link to="/acesso" state={{ voltar: pathname }}>Entrar</Link>}
                 </nav>
               </div>
             </header>

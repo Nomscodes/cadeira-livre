@@ -23,7 +23,7 @@ export default function BuscarPage() {
       <header className="topbar-simple">
         <Link to="/buscar" className="logo-box" aria-label="Cadeira Livre"><img src={logo} alt="Cadeira Livre" style={{ height: 32 }} /></Link>
         <div className="topbar-acoes">
-          <Link to="/meus-agendamentos" className="link-small">meus agendamentos</Link>
+          <Link to="/meus-agendamentos" className="link-small">Meus Agendamentos</Link>
           <ClienteNotificationBell />
         </div>
       </header>
