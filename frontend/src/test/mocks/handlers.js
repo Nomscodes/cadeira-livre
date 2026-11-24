@@ -1,6 +1,6 @@
-import { ApiError } from '../lib/errors'
-import { digits, isEmail, slugify } from '../lib/format'
-import { addDaysISO, formatDateBR, monthKey, startOf, todayISO } from '../lib/dates'
+import { ApiError } from '../../lib/errors'
+import { digits, isEmail, slugify } from '../../lib/format'
+import { addDaysISO, formatDateBR, monthKey, startOf, todayISO } from '../../lib/dates'
 import { getDb, nextId, resetMock, save, semana } from './db'
 import { route, requireAdmin, requireCliente, requireStaff } from './router'
 import {
@@ -854,9 +854,4 @@ if (__MODO_TESTE__) {
     save()
     return null
   })
-}
-
-/* utilitario de desenvolvimento: window.__resetMock() */
-if (typeof window !== 'undefined') {
-  window.__resetMock = () => { resetMock(); window.location.reload() }
 }

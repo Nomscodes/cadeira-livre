@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
-import { getDb, resetMock, save } from '../mocks/db'
+import { getDb, resetMock, save } from './mocks/db'
 import { api } from '../lib/http'
 
 const abrir = (url) => {
@@ -49,8 +49,7 @@ describe('login', () => {
     const user = userEvent.setup()
     abrir('/login')
     expect(await screen.findByLabelText('e-mail')).toBeInTheDocument()
-    expect(screen.getByText(/admin\/admin \(administrador\) · func\/func \(funcionário\)/)).toBeInTheDocument() // dica do modo de testes
-    await user.type(screen.getByLabelText('e-mail'), 'admin')
+    await user.type(screen.getByLabelText('e-mail'), 'admin@teste.com')
     await user.type(screen.getByLabelText('senha'), 'admin')
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
     expect(await screen.findByRole('heading', { name: 'Meu portal' }, espera)).toBeInTheDocument()
@@ -208,7 +207,7 @@ describe('login', () => {
     const user = userEvent.setup()
     window.localStorage.setItem('cl:staff', JSON.stringify(await api.post('/auth/login', { email: 'admin', senha: 'admin' })))
     abrir('/painel')
-    await user.click(await screen.findByRole('button', { name: 'sair' }, espera))
+    await user.click(await screen.findByRole('button', { name: 'Sair' }, espera))
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sair' }))
     await waitFor(() => expect(window.location.pathname).toBe('/login'), espera)
     expect(window.localStorage.getItem('cl:staff')).toBeNull()
@@ -232,6 +231,24 @@ describe('area do cliente', () => {
     expect(await screen.findByText('Barbearia do Rafael', {}, espera)).toBeInTheDocument()
     expect(screen.getByText('Studio Juliana Matos')).toBeInTheDocument()
     expect(screen.queryByText('Diego Santos Barber')).not.toBeInTheDocument() // outra cidade
+  })
+  it('logado, a area do cliente mostra quem esta entrando e deixa sair para trocar de conta', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
+    abrir('/acesso')
+    const dialogo = await screen.findByRole('dialog', {}, espera)
+    expect(dialogo).toHaveTextContent('Você já está entrando como Gabriel Naoki')
+    await user.click(within(dialogo).getByRole('button', { name: 'Sair' }))
+    expect(await screen.findByLabelText('e-mail', {}, espera)).toBeInTheDocument()
+    expect(window.localStorage.getItem('cl:cliente')).toBeNull()
+  })
+  it('logado, continuar leva para a pagina de origem', async () => {
+    const user = userEvent.setup()
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
+    abrir('/acesso')
+    await user.click(await screen.findByRole('button', { name: 'Continuar' }, espera))
+    expect(await screen.findByRole('heading', { name: 'Encontre seu salão' }, espera)).toBeInTheDocument()
+    expect(window.localStorage.getItem('cl:cliente')).not.toBeNull()
   })
   it('dono que tenta entrar pela area do cliente e avisado', async () => {
     const user = userEvent.setup()
@@ -335,7 +352,7 @@ describe('painel do responsavel', () => {
     expect(document.documentElement.style.getPropertyValue('--c-primary')).toBe('#1B4F9C') // azul escuro salvo
     await user.click(screen.getByRole('radio', { name: 'Laranja escuro' }))
     expect(document.documentElement.style.getPropertyValue('--c-primary')).toBe('#B4510F')
-    await user.click(screen.getByRole('link', { name: 'agendamentos' }))
+    await user.click(screen.getByRole('link', { name: 'Agendamentos' }))
     await screen.findByText('Marcos Silva', {}, espera)
     expect(document.documentElement.style.getPropertyValue('--c-primary')).toBe('#1B4F9C') // voltou
   })
@@ -480,9 +497,37 @@ describe('sair da area do cliente', () => {
     const user = userEvent.setup()
     window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
     abrir('/meus-agendamentos')
-    await user.click(await screen.findByRole('button', { name: 'sair' }, espera))
+    await user.click(await screen.findByRole('button', { name: 'Sair' }, espera))
     expect(await screen.findByRole('heading', { name: 'Área do cliente' }, espera)).toBeInTheDocument()
     expect(window.location.pathname).toBe('/acesso')
+    expect(window.localStorage.getItem('cl:cliente')).toBeNull()
+  })
+})
+
+describe('sair pelas paginas do cliente', () => {
+  const logado = () => window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
+  it('na busca, sair encerra a sessao e leva para a area do cliente', async () => {
+    const user = userEvent.setup()
+    logado()
+    abrir('/buscar')
+    await user.click(await screen.findByRole('button', { name: 'Sair' }, espera))
+    expect(await screen.findByText(/entre para agendar/, {}, espera)).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/acesso')
+    expect(window.localStorage.getItem('cl:cliente')).toBeNull()
+  })
+  it('sessao salva que nao vale mais no servidor nao mostra o modal e volta ao formulario', async () => {
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'mock.expirado.0', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }))
+    abrir('/acesso')
+    expect(await screen.findByLabelText('e-mail', {}, espera)).toBeInTheDocument()
+    await waitFor(() => expect(window.localStorage.getItem('cl:cliente')).toBeNull(), espera)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+  it('na pagina do salao, sair troca Meus Agendamentos por Entrar', async () => {
+    const user = userEvent.setup()
+    logado()
+    abrir('/barbearia-do-rafael')
+    await user.click(await screen.findByRole('button', { name: 'Sair' }, espera))
+    expect(await screen.findByRole('link', { name: 'Entrar' }, espera)).toBeInTheDocument()
     expect(window.localStorage.getItem('cl:cliente')).toBeNull()
   })
 })
@@ -731,7 +776,7 @@ describe('sino do cliente', () => {
     entrarComoCliente()
     abrir('/buscar')
     const sino = await screen.findByRole('button', { name: /Notificações, 2 não lidas/ }, espera)
-    expect(sino.parentElement.parentElement).toContainElement(screen.getByRole('link', { name: 'meus agendamentos' }))
+    expect(sino.parentElement.parentElement).toContainElement(screen.getByRole('link', { name: 'Meus Agendamentos' }))
     await user.click(sino)
     const menu = await screen.findByRole('menu', { name: 'Notificações' })
     expect(within(menu).getByRole('menuitem', { name: /Horário confirmado/ })).toBeInTheDocument()
@@ -746,7 +791,7 @@ describe('sino do cliente', () => {
     const sino = await screen.findByRole('button', { name: /Notificações, 2 não lidas/ }, espera)
     const nav = screen.getByRole('navigation', { name: 'Principal' })
     const ordem = [...nav.children].map((el) => (el.contains(sino) ? 'sino' : el.textContent))
-    expect(ordem).toEqual(['buscar salões', 'meus agendamentos', 'sino', 'sair'])
+    expect(ordem).toEqual(['Buscar Salões', 'Meus Agendamentos', 'sino', 'Sair'])
     await user.click(sino)
     await user.click(await screen.findByRole('menuitem', { name: /Horário confirmado/ }))
     expect(await screen.findByRole('button', { name: /Notificações, 1 não lidas/ }, espera)).toBeInTheDocument()

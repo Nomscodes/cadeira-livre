@@ -6,7 +6,7 @@ import { useCliente } from '../../context/ClienteContext'
 import Frame from './Frame'
 import ClienteNotificationBell from './ClienteNotificationBell'
 
-/** Historico do cliente: cabecalho com a marca Cadeira Livre (header-client do mockup). */
+/** Historico do cliente: cabecalho com a marca Cadeira Livre. */
 export default function ClienteLayout() {
   const { sair } = useCliente()
   const navigate = useNavigate()
@@ -24,10 +24,10 @@ export default function ClienteLayout() {
             {aberto ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
           </button>
           <nav id="nav-cliente" className={`nav-client${aberto ? ' open' : ''}`} aria-label="Principal" onClick={() => setAberto(false)}>
-            <NavLink to="/buscar">buscar salões</NavLink>
-            <NavLink to="/meus-agendamentos">meus agendamentos</NavLink>
+            <NavLink to="/buscar">Buscar Salões</NavLink>
+            <NavLink to="/meus-agendamentos">Meus Agendamentos</NavLink>
             <ClienteNotificationBell />
-            <button type="button" className="navlink" onClick={async () => { await sair(); navigate('/acesso') }}>sair</button>
+            <button type="button" className="navlink" onClick={async () => { await sair(); navigate('/acesso') }}>Sair</button>
           </nav>
         </div>
       </header>

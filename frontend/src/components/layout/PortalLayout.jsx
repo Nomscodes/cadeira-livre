@@ -31,7 +31,7 @@ function PortalVazio({ oculto }) {
 export default function PortalLayout() {
   const { slug } = useParams()
   const { pathname } = useLocation()
-  const { autenticado } = useCliente()
+  const { autenticado, sair } = useCliente()
   const [menu, setMenu] = useState(false)
   const [mapa, setMapa] = useState(false)
   const { data: salao, loading, error, reload } = useAsync(() => api.get(`/saloes/${slug}`), [slug])
@@ -44,7 +44,7 @@ export default function PortalLayout() {
 
   const base = `/${salao.slug}`
   const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(salao.endereco || salao.nome)}`
-  // no mockup a tela de agendamento nao tem cabecalho nem rodape do salao
+  // a tela de agendamento nao tem cabecalho nem rodape do salao
   const solto = pathname.endsWith('/agendar')
 
   return (
@@ -62,12 +62,17 @@ export default function PortalLayout() {
                   {menu ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
                 </button>
                 <nav id="nav-portal" className={`nav-client${menu ? ' open' : ''}`} aria-label="Portal do salão" onClick={() => setMenu(false)}>
-                  <NavLink to={base} end>início</NavLink>
-                  <NavLink to={`${base}/agendar`}>agendamento</NavLink>
-                  <NavLink to={`${base}/saiba-mais`}>saiba mais</NavLink>
-                  {autenticado
-                    ? <NavLink to="/meus-agendamentos">meus agendamentos</NavLink>
-                    : <Link to="/acesso" state={{ voltar: pathname }}>entrar</Link>}
+                  <NavLink to={base} end>Início</NavLink>
+                  <NavLink to={`${base}/agendar`}>Agendamento</NavLink>
+                  <NavLink to={`${base}/saiba-mais`}>Saiba Mais</NavLink>
+                  {autenticado ? (
+                    <>
+                      <NavLink to="/meus-agendamentos">Meus Agendamentos</NavLink>
+                      <button type="button" className="navlink" onClick={() => sair()}>Sair</button>
+                    </>
+                  ) : (
+                    <Link to="/acesso" state={{ voltar: pathname }}>Entrar</Link>
+                  )}
                 </nav>
               </div>
             </header>

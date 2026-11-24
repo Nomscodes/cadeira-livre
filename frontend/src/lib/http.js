@@ -1,7 +1,6 @@
 import { ApiError } from './errors'
 import { store } from './storage'
 
-export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
 const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
 
 export const STORAGE_KEYS = { staff: 'cl:staff', cliente: 'cl:cliente' }
@@ -15,10 +14,7 @@ const tokenFor = (as) => {
 }
 
 /**
- * Unico ponto de saida de rede do front.
- * - VITE_USE_MOCK=true  -> responde com src/mocks (sem backend)
- * - VITE_USE_MOCK=false -> fetch no backend Spring Boot (VITE_API_URL)
- * Os componentes nao sabem qual dos dois esta ativo.
+ * Unico ponto de saida de rede do front: chama o backend Spring Boot em VITE_API_URL.
  *
  * `as`: 'staff' (responsavel/funcionario), 'cliente' (acesso temporario) ou omitido (publico).
  * `token`: um token especifico, no lugar do guardado para `as`.
@@ -26,11 +22,6 @@ const tokenFor = (as) => {
 async function perform(method, path, { body, query, as, token: tokenProprio } = {}) {
   // token: usado quando a sessao ainda nao foi guardada (ex.: encerrar a sessao de uma conta da tela errada)
   const token = tokenProprio || tokenFor(as)
-
-  if (USE_MOCK) {
-    const { mockRequest } = await import('../mocks')
-    return mockRequest(method, path, { body, query, token })
-  }
 
   const qs = query
     ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString()

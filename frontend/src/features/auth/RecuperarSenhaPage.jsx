@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../../lib/http'
 import { useDocumentTitle } from '../../lib/hooks'
-import { USE_MOCK } from '../../lib/http'
 import { useToast } from '../../context/ToastContext'
 import AuthShell from '../../components/layout/AuthShell'
 import Button from '../../components/ui/Button'
@@ -56,7 +55,7 @@ export default function RecuperarSenhaPage() {
 
       {etapa === 'email' && (
         <form onSubmit={enviarEmail} noValidate>
-          <Field label="e-mail cadastrado" hint={USE_MOCK ? 'Para testar, use admin@teste.com.' : undefined}>
+          <Field label="e-mail cadastrado">
             <input type="text" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </Field>
           {erro && <div className="box warn" role="alert">{erro}</div>}
@@ -67,7 +66,7 @@ export default function RecuperarSenhaPage() {
       {etapa === 'codigo' && (
         <form onSubmit={confirmarCodigo} noValidate>
           <p className="hint">Enviamos um código de recuperação para {email}.</p>
-          <Field label="código recebido" hint={USE_MOCK ? 'Código de teste: 123456' : undefined}>
+          <Field label="código recebido">
             <input type="text" inputMode="numeric" autoComplete="one-time-code" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
           </Field>
           {erro && <div className="box warn" role="alert">{erro}</div>}

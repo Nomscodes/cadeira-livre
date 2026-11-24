@@ -5,10 +5,9 @@ import Frame from './Frame'
 /**
  * Moldura das telas soltas.
  *  back      link "← voltar" no topo (area do cliente, avaliacao)
- *  ambiente  mostra "Ambiente: Web · Desktop" a direita (somente no login)
  *  bare      sem barra superior (portal oculto / pagina inexistente)
  */
-export default function AuthShell({ back, ambiente, bare, children, cardClass = '' }) {
+export default function AuthShell({ back, bare, children, cardClass = '' }) {
   return (
     <Frame>
       {!bare && (
@@ -18,7 +17,6 @@ export default function AuthShell({ back, ambiente, bare, children, cardClass = 
           ) : (
             <Link to="/" className="logo-box" aria-label="Cadeira Livre, início"><img src={logo} alt="Cadeira Livre" /></Link>
           )}
-          {ambiente ? <span>Ambiente: Web &middot; Desktop</span> : <span />}
         </header>
       )}
       <main className="center-col" id="conteudo">
