@@ -188,7 +188,7 @@ async function cenarioDaEquipe(s, { ids, dias }) {
 
 /** Clientes: o primeiro é a conta da apresentação. */
 const CLIENTES = {
-  gabriel: ['Gabriel Naoki', 'cliente@teste.com', '(62) 98100-0001'],
+  amanda: ['Amanda', 'cliente@teste.com', '(62) 98100-0001'],
   ana: ['Ana Souza', 'ana.souza@teste.com', '(62) 98100-0002'],
   bruno: ['Bruno Costa', 'bruno.costa@teste.com', '(62) 98100-0003'],
   carla: ['Carla Dias', 'carla.dias@teste.com', '(62) 98100-0004'],
@@ -225,7 +225,7 @@ const SALOES = [
     horarioProfissionais: { thiago: semana(SEG_SEX, '09:00', '18:00', ['09:00', '14:00']) },
     configuracoes: { atendimento: 'local', cancelamentoHoras: 4, funcionariosEditamHorario: true },
     agendamentos: [
-      { cliente: 'gabriel', item: 'Corte + Barba', quem: 'thiago', dia: 0, hora: '10:00', status: 'aprovar' },
+      { cliente: 'amanda', item: 'Corte + Barba', quem: 'thiago', dia: 0, hora: '10:00', status: 'aprovar' },
       { cliente: 'ana', item: 'Corte masculino', quem: 'thiago', dia: 1, hora: '14:00', status: 'aprovar' },
       { cliente: 'bruno', item: 'Barba', quem: 'thiago', dia: 2, hora: '11:00' },
     ],
@@ -259,11 +259,11 @@ const SALOES = [
     horarioProfissionais: { rafael: semana(SEG_SEX, '09:00', '18:00', ['09:00', '14:00']) },
     configuracoes: { atendimento: 'local', cancelamentoHoras: 4, funcionariosEditamHorario: true },
     agendamentos: [
-      { cliente: 'gabriel', item: 'Corte + Barba', quem: 'rafael', dia: 0, hora: '10:00', status: 'aprovar' },
+      { cliente: 'amanda', item: 'Corte + Barba', quem: 'rafael', dia: 0, hora: '10:00', status: 'aprovar' },
       { cliente: 'ana', item: 'Corte masculino', quem: 'diego', dia: 0, hora: '14:00', status: 'aprovar' },
       { cliente: 'bruno', item: 'Pigmentação', quem: 'diego', dia: 1, hora: '10:00' },
       { cliente: 'carla', item: 'Sobrancelha', quem: 'lucas', dia: 1, hora: '15:00' },
-      { cliente: 'gabriel', item: 'Barba', quem: 'rafael', dia: 2, hora: '11:00', status: 'recusar' },
+      { cliente: 'amanda', item: 'Barba', quem: 'rafael', dia: 2, hora: '11:00', status: 'recusar' },
       { cliente: 'ana', item: 'Corte masculino', quem: 'rafael', dia: 2, hora: '16:00', status: 'cancelar' },
       { cliente: 'bruno', item: 'Corte masculino', quem: 'rafael', dia: 3, hora: '09:00', status: 'aprovar' },
     ],
@@ -287,7 +287,7 @@ const SALOES = [
     configuracoes: { atendimento: 'local', cancelamentoHoras: 6, funcionariosEditamHorario: false },
     agendamentos: [
       { cliente: 'carla', item: 'Escova', quem: 'dono', dia: 0, hora: '10:00', status: 'aprovar' },
-      { cliente: 'gabriel', item: 'Manicure', quem: 'dono', dia: 1, hora: '14:00' },
+      { cliente: 'amanda', item: 'Manicure', quem: 'dono', dia: 1, hora: '14:00' },
       { cliente: 'ana', item: 'Corte + Escova', quem: 'dono', dia: 5, hora: '10:00' },
     ],
   },
@@ -388,7 +388,7 @@ const SALOES = [
     configuracoes: { atendimento: 'local', cancelamentoHoras: 6, funcionariosEditamHorario: false },
     agendamentos: [
       { cliente: 'paula', item: 'Escova', quem: 'priscila', dia: 2, hora: '09:00', status: 'aprovar' },
-      { cliente: 'helena', item: 'Coloração', quem: 'priscila', dia: 4, hora: '10:00' },
+      { cliente: 'helena', item: 'Coloração', quem: 'priscila', dia: 3, hora: '10:00' },
     ],
   },
   {
@@ -464,6 +464,13 @@ const SALOES = [
 
 async function main() {
   console.log(`Povoando ${API} ...`)
+  // so povoa banco vazio: se ja houver salao publicado, nao mexe em nada
+  const existentes = await api('GET', '/saloes')
+  if (existentes.length > 0) {
+    console.log(`O banco já tem ${existentes.length} salão(ões). Nada foi alterado.`)
+    console.log('Para povoar de novo, zere o banco (docker compose down -v) e suba o backend antes.')
+    return
+  }
   const dias = diasUteis(6, temFeriado ? [feriado] : [])
 
   // clientes (o cadastro devolve a sessão; se já existir, só entra)
