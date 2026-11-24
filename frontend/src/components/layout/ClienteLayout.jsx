@@ -6,7 +6,7 @@ import { useCliente } from '../../context/ClienteContext'
 import Frame from './Frame'
 import ClienteNotificationBell from './ClienteNotificationBell'
 
-/** Historico do cliente: cabecalho com a marca Cadeira Livre (header-client do mockup). */
+/** Historico do cliente: cabecalho com a marca Cadeira Livre. */
 export default function ClienteLayout() {
   const { sair } = useCliente()
   const navigate = useNavigate()

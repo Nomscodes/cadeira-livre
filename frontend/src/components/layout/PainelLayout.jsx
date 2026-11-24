@@ -16,11 +16,11 @@ const PainelCtx = createContext(null)
 export const usePainel = () => useContext(PainelCtx)
 
 const ITENS = [
-  { to: '/painel', label: 'Meu portal', menu: 'meu portal', end: true },
-  { to: '/painel/agendamentos', label: 'Agendamentos', menu: 'agendamentos' },
-  { to: '/painel/servicos', label: 'Serviços', menu: 'serviços' },
-  { to: '/painel/profissionais', label: 'Profissionais', menu: 'profissionais' },
-  { to: '/painel/configuracoes', label: 'Configurações', menu: 'configurações' },
+  { to: '/painel', label: 'Meu portal', menu: 'Meu Portal', end: true },
+  { to: '/painel/agendamentos', label: 'Agendamentos', menu: 'Agendamentos' },
+  { to: '/painel/servicos', label: 'Serviços', menu: 'Serviços' },
+  { to: '/painel/profissionais', label: 'Profissionais', menu: 'Profissionais' },
+  { to: '/painel/configuracoes', label: 'Configurações', menu: 'Configurações' },
 ]
 
 export default function PainelLayout() {
@@ -58,7 +58,7 @@ export default function PainelLayout() {
             {ITENS.map(({ to, menu, end }) => (
               <NavLink key={to} to={to} end={end} className="side-item">{menu}</NavLink>
             ))}
-            <button type="button" className="side-item" onClick={() => setSair(true)}>sair</button>
+            <button type="button" className="side-item" onClick={() => setSair(true)}>Sair</button>
           </nav>
         </aside>
 

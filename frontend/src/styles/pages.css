@@ -1,5 +1,5 @@
 /* =========================================================
-   Telas especificas (valores do mockup + camada de celular)
+   Telas especificas (camada de celular)
    ========================================================= */
 .form-grid { display: grid; gap: 0 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-grid .full { grid-column: 1 / -1; }

@@ -44,7 +44,7 @@ export default function PortalLayout() {
 
   const base = `/${salao.slug}`
   const maps = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(salao.endereco || salao.nome)}`
-  // no mockup a tela de agendamento nao tem cabecalho nem rodape do salao
+  // a tela de agendamento nao tem cabecalho nem rodape do salao
   const solto = pathname.endsWith('/agendar')
 
   return (

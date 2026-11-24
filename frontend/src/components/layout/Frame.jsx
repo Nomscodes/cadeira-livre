@@ -1,8 +1,4 @@
-/** Quadro arredondado sobre o fundo creme (como no mockup). No celular o CSS remove a moldura. */
+/** Envolve o conteudo da tela. A tela ocupa o navegador inteiro (horizontal e vertical). */
 export default function Frame({ children }) {
-  return (
-    <div className="wrap">
-      <div className="frame">{children}</div>
-    </div>
-  )
+  return <>{children}</>
 }

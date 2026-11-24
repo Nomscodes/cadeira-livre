@@ -1,6 +1,6 @@
 /* =========================================================
    Design tokens do Cadeira Livre
-   Fonte: mockup.html (identidade oficial da marca)
+   Fonte: identidade oficial da marca
    ========================================================= */
 :root {
   /* ---- identidade ---- */
@@ -70,7 +70,6 @@
   /* ---- layout ---- */
   --page-pad: clamp(16px, 4vw, 40px);
   --touch: 44px;
-  --proto-h: 0px; /* altura da barra de prototipo (preenchida em ProtoBar) */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
