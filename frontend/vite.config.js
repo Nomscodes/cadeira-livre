@@ -7,7 +7,11 @@ import react from '@vitejs/plugin-react'
  */
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  server: { port: 5173 },
+  server: {
+    port: 5173,
+    // em desenvolvimento, chamadas para /api vao para o backend: dispensa o .env
+    proxy: { '/api': { target: 'http://localhost:8080', changeOrigin: true } },
+  },
   define: {
     __MODO_TESTE__: JSON.stringify(mode === 'test'),
   },

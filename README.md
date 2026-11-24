@@ -173,12 +173,10 @@ No ambiente local, o perfil `dev` já traz valores de desenvolvimento, então o 
 4. Em outro terminal, executar o frontend (porta **5173**):
    ```bash
    cd frontend
-   copy .env.example .env
    npm install
    npm run dev
    ```
-   No arquivo `frontend/.env`, troque `VITE_USE_MOCK=true` por `VITE_USE_MOCK=false` para usar a API real.
-   (No Linux ou macOS, use `cp` em vez de `copy`.)
+   Em desenvolvimento, o Vite encaminha as chamadas `/api` para o backend (porta 8080), então não é preciso criar o `.env`. Só crie `frontend/.env` (a partir do `.env.example`) se quiser apontar para outra URL da API.
 5. Com o banco vazio, povoar com os dados de demonstração (com a API rodando, na raiz do projeto):
    ```bash
    node database/povoar-pela-api.mjs
