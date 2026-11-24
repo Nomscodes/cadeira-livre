@@ -1,5 +1,5 @@
 import { getDb } from './db'
-import { daysInMonth, startOf, toHHMM, toISO, toMinutes, todayISO, weekdayOf } from '../lib/dates'
+import { daysInMonth, startOf, toHHMM, toISO, toMinutes, todayISO, weekdayOf } from '../../lib/dates'
 
 export const STEP = 30
 const ALMOCO = [12 * 60, 13 * 60] // descanso padrao: 12:00 as 13:00

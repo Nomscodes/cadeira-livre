@@ -56,10 +56,6 @@ export function AuthProvider({ children }) {
       }
       persist(null)
     },
-    /** So para a barra de prototipo (modo simulado): entra direto como um dos perfis de teste. */
-    demoLogin: (papel) => persist(papel === 'administrador'
-      ? { token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }
-      : { token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1', profissionalId: 'p1' } }),
   }), [session, persist])
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>

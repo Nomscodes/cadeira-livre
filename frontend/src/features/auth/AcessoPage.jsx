@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useDocumentTitle } from '../../lib/hooks'
-import { USE_MOCK } from '../../lib/http'
 import { digits, isEmail, maskPhone } from '../../lib/format'
 import { useCliente } from '../../context/ClienteContext'
 import AuthShell from '../../components/layout/AuthShell'
@@ -41,7 +40,6 @@ function EntrarForm({ onEntrou }) {
       </Field>
       {erro && <div className="box warn" role="alert">{erro}</div>}
       <Button type="submit" block loading={busy} style={{ marginTop: 14 }}>Entrar</Button>
-      {USE_MOCK && <p className="hint" style={{ marginTop: 10 }}>fase de testes: cliente@teste.com / 12345678</p>}
     </form>
   )
 }

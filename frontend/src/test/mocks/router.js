@@ -1,4 +1,4 @@
-import { ApiError } from '../lib/errors'
+import { ApiError } from '../../lib/errors'
 import { getDb } from './db'
 
 const routes = []

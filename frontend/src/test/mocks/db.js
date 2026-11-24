@@ -1,5 +1,5 @@
-import { store } from '../lib/storage'
-import { addDaysISO, todayISO, weekdayOf } from '../lib/dates'
+import { store } from '../../lib/storage'
+import { addDaysISO, todayISO, weekdayOf } from '../../lib/dates'
 
 const KEY = 'cl:mockdb:v3' // v3: contas de cliente com e-mail e senha (igual ao backend)
 

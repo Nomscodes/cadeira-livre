@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDocumentTitle } from '../../lib/hooks'
 import { digits, isEmail } from '../../lib/format'
-import { USE_MOCK } from '../../lib/http'
 import { homeDoPapel, useAuth } from '../../context/AuthContext'
 import AuthShell from '../../components/layout/AuthShell'
 import Button from '../../components/ui/Button'
@@ -41,7 +40,6 @@ function LoginForm({ onConvite }) {
       </Field>
       {erro && <div className="box warn" role="alert">{erro}</div>}
       <Button type="submit" block loading={busy} style={{ marginTop: 14 }}>Entrar</Button>
-      {USE_MOCK && <p className="hint" style={{ marginTop: 10 }}>fase de testes: admin/admin (administrador) &middot; func/func (funcionário). O sistema reconhece o cargo pelo login.</p>}
       <hr className="divider" />
       <Link to="/acesso" className="btn ghost block">Sou cliente, quero agendar um horário</Link>
       <button type="button" className="btn ghost block" style={{ marginTop: 8 }} onClick={onConvite}>Sou funcionário, tenho um código de convite</button>
@@ -195,7 +193,7 @@ export default function LoginPage() {
   }[aba]
 
   return (
-    <AuthShell ambiente>
+    <AuthShell>
       <div className="tabs2" role="tablist" aria-label="Acesso">
         <button type="button" role="tab" id="tab-login" aria-selected={aba !== 'cadastro'} aria-controls="painel-acesso" onClick={() => trocar('login')}>Entrar</button>
         <button type="button" role="tab" id="tab-cadastro" aria-selected={aba === 'cadastro'} aria-controls="painel-acesso" onClick={() => trocar('cadastro')}>Cadastrar barbearia</button>
