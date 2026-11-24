@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDocumentTitle } from '../../lib/hooks'
 import { digits, isEmail, maskPhone } from '../../lib/format'
 import { useCliente } from '../../context/ClienteContext'
@@ -103,21 +103,27 @@ function CadastroForm({ onEntrou }) {
 
 /** Area do cliente: entrar ou criar conta. Depois volta para a pagina de onde veio. */
 export default function AcessoPage() {
-  const { autenticado } = useCliente()
+  const { autenticado, usuario, sair } = useCliente()
   const navigate = useNavigate()
   const { state } = useLocation()
   const destino = state?.voltar || '/buscar'
   const [aba, setAba] = useState('entrar')
   useDocumentTitle(aba === 'cadastro' ? 'Criar conta de cliente' : 'Área do cliente')
 
-  if (autenticado) return <Navigate to={destino} replace />
-
   const entrou = () => navigate(destino, { replace: true })
 
   return (
     <AuthShell back={{ to: '/login', label: 'voltar' }}>
       <h3 style={{ marginTop: 0 }}>Área do cliente</h3>
-      <p className="hint">entre para agendar, ver seus horários e avaliar o atendimento</p>
+      {autenticado ? (
+        <div role="status">
+          <p className="hint">Você já está entrando como <strong>{usuario.nome}</strong>.</p>
+          <button type="button" className="btn" onClick={() => navigate(destino, { replace: true })}>Continuar</button>{' '}
+          <button type="button" className="btn ghost" onClick={sair}>Sair</button>
+        </div>
+      ) : (
+        <p className="hint">entre para agendar, ver seus horários e avaliar o atendimento</p>
+      )}
       <div className="tabs2" role="tablist" aria-label="Área do cliente">
         <button type="button" role="tab" id="tab-entrar" aria-selected={aba === 'entrar'} aria-controls="painel-cliente" onClick={() => setAba('entrar')}>Entrar</button>
         <button type="button" role="tab" id="tab-cadastro" aria-selected={aba === 'cadastro'} aria-controls="painel-cliente" onClick={() => setAba('cadastro')}>Criar conta</button>
