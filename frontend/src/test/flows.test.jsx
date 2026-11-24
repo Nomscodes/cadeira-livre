@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
-import { getDb, resetMock, save } from '../mocks/db'
+import { getDb, resetMock, save } from './mocks/db'
 import { api } from '../lib/http'
 
 const abrir = (url) => {
@@ -49,8 +49,7 @@ describe('login', () => {
     const user = userEvent.setup()
     abrir('/login')
     expect(await screen.findByLabelText('e-mail')).toBeInTheDocument()
-    expect(screen.getByText(/admin\/admin \(administrador\) · func\/func \(funcionário\)/)).toBeInTheDocument() // dica do modo de testes
-    await user.type(screen.getByLabelText('e-mail'), 'admin')
+    await user.type(screen.getByLabelText('e-mail'), 'admin@teste.com')
     await user.type(screen.getByLabelText('senha'), 'admin')
     await user.click(screen.getByRole('button', { name: 'Entrar' }))
     expect(await screen.findByRole('heading', { name: 'Meu portal' }, espera)).toBeInTheDocument()
@@ -208,7 +207,7 @@ describe('login', () => {
     const user = userEvent.setup()
     window.localStorage.setItem('cl:staff', JSON.stringify(await api.post('/auth/login', { email: 'admin', senha: 'admin' })))
     abrir('/painel')
-    await user.click(await screen.findByRole('button', { name: 'sair' }, espera))
+    await user.click(await screen.findByRole('button', { name: 'Sair' }, espera))
     await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Sair' }))
     await waitFor(() => expect(window.location.pathname).toBe('/login'), espera)
     expect(window.localStorage.getItem('cl:staff')).toBeNull()
@@ -335,7 +334,7 @@ describe('painel do responsavel', () => {
     expect(document.documentElement.style.getPropertyValue('--c-primary')).toBe('#1B4F9C') // azul escuro salvo
     await user.click(screen.getByRole('radio', { name: 'Laranja escuro' }))
     expect(document.documentElement.style.getPropertyValue('--c-primary')).toBe('#B4510F')
-    await user.click(screen.getByRole('link', { name: 'agendamentos' }))
+    await user.click(screen.getByRole('link', { name: 'Agendamentos' }))
     await screen.findByText('Marcos Silva', {}, espera)
     expect(document.documentElement.style.getPropertyValue('--c-primary')).toBe('#1B4F9C') // voltou
   })

@@ -17,7 +17,6 @@ const resposta = (status, corpo) => ({
 
 /** Carrega o http.js apontando para o backend real (sem a API simulada), com um fetch falso no lugar da rede. */
 async function apiReal(fetchFalso) {
-  vi.stubEnv('VITE_USE_MOCK', 'false')
   vi.stubEnv('VITE_API_URL', 'http://localhost:8080/api')
   vi.stubGlobal('fetch', fetchFalso)
   vi.resetModules()
