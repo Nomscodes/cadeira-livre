@@ -199,7 +199,7 @@ export default function AgendaPage() {
           <h1 className="topbar-title"><span>Minha agenda<span className="hide-sm">, {perfil.nome}</span></span></h1>
           <div className="topbar-right">
             <NotificationBell />
-            <Button small variant="ghost" onClick={() => setSair(true)}><LogOut size={16} aria-hidden="true" />sair</Button>
+            <Button small variant="ghost" onClick={() => setSair(true)}><LogOut size={16} aria-hidden="true" />Sair</Button>
           </div>
         </header>
 
