@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDocumentTitle } from '../../lib/hooks'
+import { api } from '../../lib/http'
 import { digits, isEmail, maskPhone } from '../../lib/format'
 import { useCliente } from '../../context/ClienteContext'
 import AuthShell from '../../components/layout/AuthShell'
 import Button from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
 import { Field, PasswordInput } from '../../components/ui/Field'
 
 /** Login do cliente com e-mail e senha (RF04). */
@@ -108,6 +110,19 @@ export default function AcessoPage() {
   const { state } = useLocation()
   const destino = state?.voltar || '/buscar'
   const [aba, setAba] = useState('entrar')
+  const [modalAberto, setModalAberto] = useState(true)
+  const [validando, setValidando] = useState(autenticado)
+
+  // a sessao salva pode nao valer mais no servidor (ex.: banco zerado). Se o token for recusado, o
+  // cl:unauthorized limpa a sessao sozinho e o modal nao aparece.
+  useEffect(() => {
+    if (!autenticado) return
+    let ativo = true
+    api.get('/cliente/notificacoes', { as: 'cliente' })
+      .catch(() => {})
+      .finally(() => { if (ativo) setValidando(false) })
+    return () => { ativo = false }
+  }, [autenticado])
   useDocumentTitle(aba === 'cadastro' ? 'Criar conta de cliente' : 'Área do cliente')
 
   const entrou = () => navigate(destino, { replace: true })
@@ -115,14 +130,15 @@ export default function AcessoPage() {
   return (
     <AuthShell back={{ to: '/login', label: 'voltar' }}>
       <h3 style={{ marginTop: 0 }}>Área do cliente</h3>
-      {autenticado ? (
-        <div role="status">
-          <p className="hint">Você já está entrando como <strong>{usuario.nome}</strong>.</p>
-          <button type="button" className="btn" onClick={() => navigate(destino, { replace: true })}>Continuar</button>{' '}
-          <button type="button" className="btn ghost" onClick={sair}>Sair</button>
-        </div>
-      ) : (
-        <p className="hint">entre para agendar, ver seus horários e avaliar o atendimento</p>
+      {!autenticado && <p className="hint">entre para agendar, ver seus horários e avaliar o atendimento</p>}
+      {autenticado && modalAberto && !validando && (
+        <Modal title="Você já está entrando" onClose={() => setModalAberto(false)} narrow>
+          <p style={{ margin: 0 }}>Você já está entrando como <strong>{usuario.nome}</strong>.</p>
+          <div className="modal-actions">
+            <Button variant="ghost" onClick={() => sair()}>Sair</Button>
+            <Button onClick={() => navigate(destino, { replace: true })}>Continuar</Button>
+          </div>
+        </Modal>
       )}
       <div className="tabs2" role="tablist" aria-label="Área do cliente">
         <button type="button" role="tab" id="tab-entrar" aria-selected={aba === 'entrar'} aria-controls="painel-cliente" onClick={() => setAba('entrar')}>Entrar</button>
