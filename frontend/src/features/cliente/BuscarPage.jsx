@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Scissors } from 'lucide-react'
 import logo from '../../assets/logo-wordmark.png'
 import Frame from '../../components/layout/Frame'
 import ClienteNotificationBell from '../../components/layout/ClienteNotificationBell'
+import { useCliente } from '../../context/ClienteContext'
 import { api } from '../../lib/http'
 import { useAsync, useDebounced, useDocumentTitle } from '../../lib/hooks'
 import { initials } from '../../lib/format'
@@ -12,6 +13,8 @@ import { Field } from '../../components/ui/Field'
 import { EmptyState, ErrorState, Loading } from '../../components/ui/States'
 
 export default function BuscarPage() {
+  const { sair } = useCliente()
+  const navigate = useNavigate()
   useDocumentTitle('Buscar salões')
   const [f, setF] = useState({ cidade: 'Goiânia, GO', categoria: 'todas', servico: '', nome: '' })
   const debounced = useDebounced(f, 250)
@@ -24,6 +27,7 @@ export default function BuscarPage() {
         <Link to="/buscar" className="logo-box" aria-label="Cadeira Livre"><img src={logo} alt="Cadeira Livre" style={{ height: 32 }} /></Link>
         <div className="topbar-acoes">
           <Link to="/meus-agendamentos" className="link-small">Meus Agendamentos</Link>
+          <button type="button" className="link-small" onClick={async () => { await sair(); navigate('/acesso') }}>Sair</button>
           <ClienteNotificationBell />
         </div>
       </header>

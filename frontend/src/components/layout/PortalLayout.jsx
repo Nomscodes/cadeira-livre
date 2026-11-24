@@ -31,7 +31,7 @@ function PortalVazio({ oculto }) {
 export default function PortalLayout() {
   const { slug } = useParams()
   const { pathname } = useLocation()
-  const { autenticado } = useCliente()
+  const { autenticado, sair } = useCliente()
   const [menu, setMenu] = useState(false)
   const [mapa, setMapa] = useState(false)
   const { data: salao, loading, error, reload } = useAsync(() => api.get(`/saloes/${slug}`), [slug])
@@ -65,9 +65,14 @@ export default function PortalLayout() {
                   <NavLink to={base} end>Início</NavLink>
                   <NavLink to={`${base}/agendar`}>Agendamento</NavLink>
                   <NavLink to={`${base}/saiba-mais`}>Saiba Mais</NavLink>
-                  {autenticado
-                    ? <NavLink to="/meus-agendamentos">Meus Agendamentos</NavLink>
-                    : <Link to="/acesso" state={{ voltar: pathname }}>Entrar</Link>}
+                  {autenticado ? (
+                    <>
+                      <NavLink to="/meus-agendamentos">Meus Agendamentos</NavLink>
+                      <button type="button" className="navlink" onClick={() => sair()}>Sair</button>
+                    </>
+                  ) : (
+                    <Link to="/acesso" state={{ voltar: pathname }}>Entrar</Link>
+                  )}
                 </nav>
               </div>
             </header>
