@@ -148,10 +148,8 @@ No ambiente local, o perfil `dev` já traz valores de desenvolvimento, então o 
 
 | Variável | Finalidade |
 |---|---|
-| `VITE_USE_MOCK` | `false` usa a API real; `true` usa a API simulada, sem backend |
-| `VITE_API_URL` | Endereço da API (local: `http://localhost:8080/api`) |
+| `VITE_API_URL` | Endereço da API. Em desenvolvimento não é obrigatória, porque o Vite encaminha `/api` para o backend. Em outros ambientes, use `http://localhost:8080/api` ou a URL da API publicada |
 | `VITE_SUPPORT_URL` | Link do canal de suporte (opcional) |
-| `VITE_MODO_TESTE`, `VITE_PROTO_BAR` | Recursos só para teste (usar `false` no deploy) |
 
 ## Instalação e execução
 
@@ -181,7 +179,28 @@ No ambiente local, o perfil `dev` já traz valores de desenvolvimento, então o 
    ```bash
    node database/povoar-pela-api.mjs
    ```
+   O script só cria dados quando o banco está vazio. Se já houver salões, ele apenas avisa e não altera nada.
 6. Abrir `http://localhost:5173`.
+
+### Zerar o banco e povoar de novo
+
+Use este passo quando quiser começar do zero. **Atenção:** apaga todos os dados do banco local.
+
+1. Pare o backend e o frontend (Ctrl+C nos dois terminais).
+2. Na raiz do projeto, zere e suba o banco:
+   ```bash
+   docker compose down -v
+   docker compose up -d
+   ```
+3. Suba o backend de novo, para ele recriar as tabelas:
+   ```bash
+   cd backend
+   mvnw spring-boot:run "-Dspring-boot.run.profiles=dev"
+   ```
+4. Em outro terminal, na raiz do projeto, povoe o banco:
+   ```bash
+   node database/povoar-pela-api.mjs
+   ```
 
 Endereços úteis:
 
@@ -197,20 +216,23 @@ Criadas pelo script `database/povoar-pela-api.mjs`. Todas usam a senha `12345678
 
 | Perfil | E-mail | Onde entrar |
 |---|---|---|
-| Dono (salão com equipe) | `gabriel.naoki@teste.com` | `/login` |
-| Dona (profissional autônoma) | `juliana.matos@teste.com` | `/login` |
-| Funcionário | `rafael.lima@teste.com` | `/login` |
-| Cliente | `gabriel.naoki.cliente@teste.com` | `/acesso` ("Sou cliente, quero agendar um horário") |
+| Dono (Barbearia Lâmina Clássica) | `admin@teste.com` | `/login` |
+| Funcionário (Barbearia Lâmina Clássica) | `func@teste.com` | `/login` |
+| Dono (Barbearia Sete Lâminas, com equipe) | `gabriel.naoki@teste.com` | `/login` |
+| Dona (Studio Juliana Matos, autônoma) | `juliana.matos@teste.com` | `/login` |
+| Cliente | `cliente@teste.com` | `/acesso` ("Sou cliente, quero agendar um horário") |
+
+As demais contas (donos e clientes de outros salões) aparecem na saída do script.
 
 ## Testes
 
 | Parte | Comando | Resultado atual |
 |---|---|---|
 | Backend | `cd backend` e `mvnw test` | 312 testes: 311 passam e 1 está desativado |
-| Frontend | `cd frontend` e `npm test` | 124 testes passando |
+| Frontend | `cd frontend` e `npm test` | 126 testes passando |
 | Build do frontend | `cd frontend` e `npm run build` | sem erros |
 
-Os testes do frontend rodam sempre com a API simulada, sem precisar do backend.
+Os testes do frontend usam dados simulados dentro dos próprios testes e não precisam do backend.
 
 A meta da especificação (RNF10) é cobertura de testes unitários **superior a 80%** do código crítico. Na v0.9.0, o backend tem **89%** de cobertura de instruções e **85%** de ramificações, medidas pelo JaCoCo (relatório em `backend/target/site/jacoco/index.html` depois do `mvnw test`).
 
