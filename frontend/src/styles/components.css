@@ -150,6 +150,7 @@ table.data tr.clickable:focus-visible { outline: 2px solid var(--c-accent); outl
 .legend-dot.off { background: var(--disabled); border-color: var(--line); }
 .legend-dot.blocked { background: var(--danger-bg); border-color: var(--danger-border); }
 .legend-dot.busy { background: var(--c-primary); }
+.legend-dot.pending { border-style: dashed; }
 .mini-cal-wrap { max-width: 320px; }
 
 /* ---------- horarios ---------- */
@@ -162,6 +163,8 @@ table.data tr.clickable:focus-visible { outline: 2px solid var(--c-accent); outl
 .slot.busy { color: #ccc; text-decoration: line-through; border-color: #ddd; cursor: not-allowed; }
 .slot.rest { background: var(--disabled); border-color: var(--line); color: var(--label); }
 .slot.static { cursor: default; }
+/* pedido pendente na agenda do funcionário: borda tracejada, ainda não ocupa o horário */
+.slot.pending { border-style: dashed; }
 .slots-title { margin-bottom: 10px; font-size: var(--fs-label); color: var(--label); }
 
 /* ---------- avaliacao ---------- */
