@@ -412,7 +412,23 @@ describe('painel do responsavel', () => {
     const botao = within(d).getByRole('button', { name: 'Apagar dados' })
     expect(botao).toBeDisabled()
     await user.type(within(d).getByLabelText(/digite APAGAR/), 'apagar')
+    // so a palavra nao basta: tambem pede a senha do dono (D2)
+    expect(botao).toBeDisabled()
+    await user.type(within(d).getByLabelText('Sua senha'), 'senha-errada')
     expect(botao).toBeEnabled()
+
+    // senha errada: o erro aparece no dialogo e nada e apagado
+    await user.click(botao)
+    expect(await within(d).findByRole('alert')).toHaveTextContent('A senha está incorreta.')
+    expect(getDb().servicos.some((s) => s.salaoId === 's1')).toBe(true)
+
+    // senha certa: apaga e fecha o dialogo
+    await user.clear(within(d).getByLabelText('Sua senha'))
+    await user.type(within(d).getByLabelText('Sua senha'), 'admin')
+    await user.click(botao)
+    expect(await screen.findByText('Dados apagados. O portal foi ocultado.', {}, espera)).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(getDb().servicos.some((s) => s.salaoId === 's1')).toBe(false)
   })
 })
 
