@@ -33,17 +33,21 @@ public class PainelContaController {
         contaService.trocarSenha(req.atual(), req.nova());
     }
 
+    // apagar dados e encerrar a conta não têm volta: o dono confirma com a senha (D2)
+    public record ConfirmacaoRequest(@NotBlank(message = "informe sua senha") String senha) {
+    }
+
     // apaga agendamentos, serviços, combos e bloqueios e oculta o portal
     @DeleteMapping("/dados")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void apagarDados() {
-        contaService.apagarDados();
+    public void apagarDados(@Valid @RequestBody ConfirmacaoRequest req) {
+        contaService.apagarDados(req.senha());
     }
 
     // apaga tudo do salão e a conta do dono
     @DeleteMapping("/conta")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void encerrarConta() {
-        contaService.encerrarConta();
+    public void encerrarConta(@Valid @RequestBody ConfirmacaoRequest req) {
+        contaService.encerrarConta(req.senha());
     }
 }
