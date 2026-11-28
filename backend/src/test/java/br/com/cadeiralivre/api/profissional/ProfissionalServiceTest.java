@@ -7,13 +7,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -23,13 +29,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import br.com.cadeiralivre.api.agendamento.Agendamento;
+import br.com.cadeiralivre.api.agendamento.AgendamentoRepository;
+import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
 import br.com.cadeiralivre.api.profissional.dto.ProfissionalRequest;
 import br.com.cadeiralivre.api.profissional.dto.ProfissionalResponse;
 import br.com.cadeiralivre.api.servico.Combo;
@@ -56,7 +65,15 @@ class ProfissionalServiceTest {
     @Mock
     private BarbeariaRepository barbeariaRepository;
 
-    @InjectMocks
+    @Mock
+    private AgendamentoRepository agendamentoRepository;
+
+    @Mock
+    private NotificacaoService notificacaoService;
+
+    // "Agora" fixo nos testes: 10/11/2026 às 09:00 no horário de Brasília
+    private final Clock relogio = Clock.fixed(Instant.parse("2026-11-10T12:00:00Z"), ZoneId.of("America/Sao_Paulo"));
+
     private ProfissionalService profissionalService;
 
     private final Barbearia minhaBarbearia = new Barbearia();
@@ -64,6 +81,9 @@ class ProfissionalServiceTest {
 
     @BeforeEach
     void logarComoDono() {
+        // o Clock não é mock, por isso o service é criado na mão
+        profissionalService = new ProfissionalService(profissionalRepository, horarioRepository, servicoRepository,
+                comboRepository, barbeariaRepository, agendamentoRepository, notificacaoService, relogio);
         minhaBarbearia.setId(UUID.randomUUID());
         minhaBarbearia.setNomeFantasia("Barbearia Gabriel Naoki");
         TenantContext.set(minhaBarbearia.getId());
@@ -219,6 +239,27 @@ class ProfissionalServiceTest {
     }
 
     @Test
+    void removerAvisaOsClientesComHorarioMarcadoEOHorarioContinua() {
+        Profissional diego = existente("Diego Santos", false);
+        diego.setNomeSocial("Diego");
+        Agendamento amanha = agendamento(LocalDate.of(2026, 11, 11), StatusAgendamento.APROVADO);
+        Agendamento pendente = agendamento(LocalDate.of(2026, 11, 12), StatusAgendamento.PENDENTE);
+        Agendamento cancelado = agendamento(LocalDate.of(2026, 11, 11), StatusAgendamento.CANCELADO);
+        Agendamento ontem = agendamento(LocalDate.of(2026, 11, 9), StatusAgendamento.APROVADO);
+        when(agendamentoRepository.doProfissional(diego.getId())).thenReturn(List.of(ontem, amanha, pendente, cancelado));
+
+        profissionalService.excluir(diego.getId());
+
+        verify(notificacaoService).avisoDoSalao(amanha, "Diego não faz mais parte da equipe da Barbearia Gabriel Naoki."
+                + " Seu horário de 11/11 às 10:00 continua marcado: fale com o salão para remarcar.");
+        verify(notificacaoService).avisoDoSalao(eq(pendente), anyString());
+        verify(notificacaoService, never()).avisoDoSalao(eq(cancelado), anyString());
+        verify(notificacaoService, never()).avisoDoSalao(eq(ontem), anyString());
+        // D1: o horário não é cancelado
+        assertEquals(StatusAgendamento.APROVADO, amanha.getStatus());
+    }
+
+    @Test
     void profissionalJaRemovidoDevolve404() {
         Profissional diego = existente("Diego Santos", false);
         diego.setAtivo(false);
@@ -229,6 +270,16 @@ class ProfissionalServiceTest {
     }
 
     // ---------- métodos de apoio ----------
+
+    private Agendamento agendamento(LocalDate data, StatusAgendamento status) {
+        Agendamento a = new Agendamento();
+        a.setId(UUID.randomUUID());
+        a.setBarbearia(minhaBarbearia);
+        a.setData(data);
+        a.setHoraInicio(LocalTime.of(10, 0));
+        a.setStatus(status);
+        return a;
+    }
 
     private Profissional profissional(String nome, boolean administrador) {
         Profissional p = new Profissional();
