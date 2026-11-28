@@ -22,7 +22,7 @@ function ProfissionaisCheck({ profissionais, value, onChange }) {
 function ServicoModal({ servico, profissionais, onClose, onSaved, onDelete }) {
   const toast = useToast()
   const novo = !servico
-  const [f, setF] = useState({ nome: servico?.nome || '', preco: fmtInput(servico?.preco), duracao: servico?.duracao ?? '', profissionalIds: servico?.profissionalIds || [] })
+  const [f, setF] = useState({ nome: servico?.nome || '', preco: fmtInput(servico?.preco), duracao: servico?.duracao ?? '', profissionalIds: servico?.profissionalIds || [], destaque: servico?.destaque ?? true })
   const [erros, setErros] = useState({})
   const [busy, setBusy] = useState(false)
 
@@ -35,7 +35,7 @@ function ServicoModal({ servico, profissionais, onClose, onSaved, onDelete }) {
     if (Object.keys(e).length) return
     setBusy(true)
     try {
-      const body = { nome: f.nome, preco: parseMoney(f.preco), duracao: Number(f.duracao), profissionalIds: f.profissionalIds }
+      const body = { nome: f.nome, preco: parseMoney(f.preco), duracao: Number(f.duracao), profissionalIds: f.profissionalIds, destaque: f.destaque }
       if (novo) await api.post('/painel/servicos', body, { as: 'staff' })
       else await api.put(`/painel/servicos/${servico.id}`, body, { as: 'staff' })
       toast.success(novo ? 'Serviço cadastrado.' : 'Serviço atualizado.')
@@ -58,6 +58,8 @@ function ServicoModal({ servico, profissionais, onClose, onSaved, onDelete }) {
         {profissionais.length === 0 ? <p className="hint">Cadastre profissionais para vinculá-los aos serviços.</p>
           : <ProfissionaisCheck profissionais={profissionais} value={f.profissionalIds} onChange={(v) => setF({ ...f, profissionalIds: v })} />}
       </FieldGroup>
+      {/* D12: o portal mostra até 4 serviços marcados em "Serviços em destaque" */}
+      <label className="check-row"><input type="checkbox" checked={f.destaque} onChange={(e) => setF({ ...f, destaque: e.target.checked })} /> mostrar em Serviços em destaque no portal</label>
       <div className="modal-actions">
         {!novo && <Button variant="danger-outline" onClick={onDelete}>Excluir</Button>}
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
