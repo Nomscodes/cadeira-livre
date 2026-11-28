@@ -185,6 +185,33 @@ class NotificacaoServiceTest {
     }
 
     @Test
+    void avisoDeHorarioJaApagadoUsaOTextoGuardado() {
+        // o salão apagou os dados: o agendamento não existe mais, só o texto que ficou guardado (V21)
+        Notificacao n = notificacao(TipoNotificacao.HORARIO_CANCELADO_PELO_SALAO);
+        n.setAgendamento(null);
+        n.setTexto("Seu horário de Corte em 12/11 às 14:00 na Barbearia Naoki foi cancelado pelo salão.");
+
+        NotificacaoResponse r = NotificacaoResponse.de(n);
+
+        assertEquals("Horário cancelado pelo salão", r.titulo());
+        assertEquals("Seu horário de Corte em 12/11 às 14:00 na Barbearia Naoki foi cancelado pelo salão.", r.texto());
+        assertNull(r.agendamentoId());
+        assertFalse(r.lida());
+    }
+
+    @Test
+    void avisoDoSalaoComAgendamentoUsaOTextoGuardadoEMantemOAgendamento() {
+        Notificacao n = notificacao(TipoNotificacao.AVISO_DO_SALAO);
+        n.setTexto("A Barbearia Naoki não vai atender em 12/11 (Feriado). Seu horário das 14:00 continua marcado.");
+
+        NotificacaoResponse r = NotificacaoResponse.de(n);
+
+        assertEquals("Aviso do salão", r.titulo());
+        assertEquals("A Barbearia Naoki não vai atender em 12/11 (Feriado). Seu horário das 14:00 continua marcado.", r.texto());
+        assertEquals(agendamento.getId(), r.agendamentoId());
+    }
+
+    @Test
     void clienteQueAgendouSemContaNaoRecebeNotificacao() {
         agendamento.setCliente(null);
 
