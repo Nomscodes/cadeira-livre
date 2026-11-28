@@ -122,6 +122,19 @@ public class NotificacaoService {
         notificacaoRepository.save(n);
     }
 
+    /**
+     * D1: o salão fechou o dia, deu folga ou desativou o profissional, mas o horário continua marcado.
+     * O aviso fica ligado ao agendamento, com o texto já pronto. Quem agendou sem conta não recebe.
+     */
+    @Transactional
+    public void avisoDoSalao(Agendamento agendamento, String texto) {
+        if (agendamento.getCliente() == null) return;
+        Notificacao n = nova(agendamento, TipoNotificacao.AVISO_DO_SALAO);
+        n.setCliente(agendamento.getCliente());
+        n.setTexto(texto.length() <= 500 ? texto : texto.substring(0, 497) + "..."); // coluna texto (V18)
+        notificacaoRepository.save(n);
+    }
+
     private Notificacao nova(Agendamento agendamento, TipoNotificacao tipo) {
         Notificacao n = new Notificacao();
         n.setAgendamento(agendamento);
