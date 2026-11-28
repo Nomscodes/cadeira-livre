@@ -43,6 +43,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class BarbeariaService {
 
+    // o descanso cabe na hora da agenda do funcionário (V22)
+    private static final List<Integer> DURACOES_DO_DESCANSO = List.of(15, 30, 45, 60);
+
     private final BarbeariaRepository barbeariaRepository;
     private final BarbeariaFotoRepository fotoRepository;
     private final ServicoRepository servicoRepository;
@@ -164,15 +167,23 @@ public class BarbeariaService {
         return montarPortal(b);
     }
 
-    /** Configurações do salão: tipo de atendimento, prazo de cancelamento e se os funcionários editam o próprio horário. */
+    /**
+     * Configurações do salão: tipo de atendimento, prazo de cancelamento, se os funcionários editam o próprio horário
+     * e a duração do descanso (D8: 15, 30, 45 ou 60 minutos; null = mantém a atual).
+     */
     @Transactional
-    public void salvarConfiguracoes(String atendimento, int cancelamentoHoras, boolean funcionariosEditamHorario) {
+    public void salvarConfiguracoes(String atendimento, int cancelamentoHoras, boolean funcionariosEditamHorario,
+                                    Integer descansoMinutos) {
+        if (descansoMinutos != null && !DURACOES_DO_DESCANSO.contains(descansoMinutos)) {
+            throw ApiException.invalido("Escolha 15, 30, 45 ou 60 minutos de descanso.");
+        }
         Barbearia b = buscarDoTenant();
         b.setAtendimento(atendimento);
         b.setCancelamentoHoras(cancelamentoHoras);
         b.setFuncionariosEditamHorario(funcionariosEditamHorario);
+        if (descansoMinutos != null) b.setDescansoMinutos(descansoMinutos);
         auditoriaService.registrar(AcaoAuditoria.PORTAL_ALTERADO, "Configurações: atendimento " + atendimento
-                + " | cancelamento até " + cancelamentoHoras + " h antes");
+                + " | cancelamento até " + cancelamentoHoras + " h antes | descanso de " + b.getDescansoMinutos() + " min");
     }
 
     /**

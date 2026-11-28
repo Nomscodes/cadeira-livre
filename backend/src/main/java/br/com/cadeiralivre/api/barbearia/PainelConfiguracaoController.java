@@ -31,7 +31,9 @@ public class PainelConfiguracaoController {
             @NotNull(message = "Informe as horas de antecedência entre 0 e 72.")
             @Min(value = 0, message = "Informe as horas de antecedência entre 0 e 72.")
             @Max(value = 72, message = "Informe as horas de antecedência entre 0 e 72.") Integer cancelamentoHoras,
-            Boolean funcionariosEditamHorario) {
+            Boolean funcionariosEditamHorario,
+            // duração do descanso dos profissionais: 15, 30, 45 ou 60 minutos (D8); sem o campo, fica como está
+            Integer descansoMinutos) {
     }
 
     public record TransferenciaRequest(@NotNull(message = "escolha o profissional") UUID profissionalId) {
@@ -41,7 +43,7 @@ public class PainelConfiguracaoController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void salvar(@Valid @RequestBody ConfiguracoesRequest req) {
         barbeariaService.salvarConfiguracoes(req.atendimento(), req.cancelamentoHoras(),
-                Boolean.TRUE.equals(req.funcionariosEditamHorario()));
+                Boolean.TRUE.equals(req.funcionariosEditamHorario()), req.descansoMinutos());
     }
 
     @PostMapping("/transferir-admin")

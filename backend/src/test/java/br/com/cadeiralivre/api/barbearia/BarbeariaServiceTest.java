@@ -433,12 +433,36 @@ class BarbeariaServiceTest {
     void salvarConfiguracoesGuardaAtendimentoPrazoEPermissaoDosFuncionarios() {
         Barbearia b = logarComoDonoDe(barbearia(true));
 
-        barbeariaService.salvarConfiguracoes("domicilio", 12, true);
+        barbeariaService.salvarConfiguracoes("domicilio", 12, true, 30);
 
         assertEquals("domicilio", b.getAtendimento());
         assertEquals(12, b.getCancelamentoHoras());
         assertTrue(b.isFuncionariosEditamHorario());
+        assertEquals(30, b.getDescansoMinutos());
         verify(auditoriaService).registrar(eq(AcaoAuditoria.PORTAL_ALTERADO), anyString());
+    }
+
+    @Test
+    void salvarConfiguracoesSemADuracaoDoDescansoMantemAAtual() {
+        Barbearia b = logarComoDonoDe(barbearia(true));
+        b.setDescansoMinutos(45);
+
+        barbeariaService.salvarConfiguracoes("local", 4, false, null);
+
+        assertEquals(45, b.getDescansoMinutos());
+    }
+
+    @Test
+    void duracaoDoDescansoForaDaListaDevolve422() {
+        Barbearia b = barbearia(true); // nem chega a buscar a barbearia
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> barbeariaService.salvarConfiguracoes("local", 4, false, 50));
+
+        assertEquals(422, erro.getStatus().value());
+        assertEquals("Escolha 15, 30, 45 ou 60 minutos de descanso.", erro.getMessage());
+        assertEquals(60, b.getDescansoMinutos());
+        verifyNoInteractions(auditoriaService);
     }
 
     @Test
