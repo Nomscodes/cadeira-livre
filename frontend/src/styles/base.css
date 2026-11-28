@@ -3,14 +3,13 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  scroll-padding-top: calc(var(--safe-top) + var(--proto-h) + 72px);
+  scroll-padding-top: calc(var(--safe-top) + 72px);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
   min-height: 100dvh;
-  padding-top: var(--proto-h);
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);

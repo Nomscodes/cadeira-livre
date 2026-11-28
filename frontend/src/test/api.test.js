@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { api } from '../lib/http'
-import { getDb, resetMock } from '../mocks/db'
+import { getDb, resetMock } from './mocks/db'
 import { addDaysISO, todayISO, weekdayOf, monthKey } from '../lib/dates'
 
 /** Login do dono da barbearia de exemplo (mesmo formato de sessao do backend). */

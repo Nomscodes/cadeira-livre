@@ -46,8 +46,6 @@ export function ClienteProvider({ children }) {
       }
       persist(null)
     },
-    /** So para a barra de prototipo (modo simulado): entra direto com o cliente de demonstracao. */
-    demoEntrar: () => persist({ token: 'mock.cliente.62955550000', usuario: { id: 'c1', nome: 'Gabriel Naoki', papel: 'CLIENTE', barbeariaId: null } }),
   }), [session, persist])
 
   return <ClienteCtx.Provider value={value}>{children}</ClienteCtx.Provider>
