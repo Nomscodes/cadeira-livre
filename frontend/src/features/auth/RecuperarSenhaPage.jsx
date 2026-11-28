@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../../lib/http'
 import { useDocumentTitle } from '../../lib/hooks'
 import { useToast } from '../../context/ToastContext'
@@ -11,7 +11,7 @@ export default function RecuperarSenhaPage() {
   useDocumentTitle('Recuperar senha')
   const navigate = useNavigate()
   const toast = useToast()
-  const [etapa, setEtapa] = useState('email') // email | codigo | senha | naoencontrado
+  const [etapa, setEtapa] = useState('email') // email | codigo | senha
   const [email, setEmail] = useState('')
   const [codigo, setCodigo] = useState('')
   const [nova, setNova] = useState('')
@@ -28,13 +28,9 @@ export default function RecuperarSenhaPage() {
 
   const enviarEmail = passo(async () => {
     if (!email.trim()) throw new Error('Informe o e-mail cadastrado.')
-    try {
-      await api.post('/auth/recuperar', { email })
-      setEtapa('codigo')
-    } catch (err) {
-      if (err.status === 404) setEtapa('naoencontrado')
-      else throw err
-    }
+    // a API responde igual com ou sem conta, para não revelar quem tem cadastro
+    await api.post('/auth/recuperar', { email })
+    setEtapa('codigo')
   })
   const confirmarCodigo = passo(async () => {
     await api.post('/auth/recuperar/codigo', { email, codigo: codigo.trim() })
@@ -65,7 +61,7 @@ export default function RecuperarSenhaPage() {
 
       {etapa === 'codigo' && (
         <form onSubmit={confirmarCodigo} noValidate>
-          <p className="hint">Enviamos um código de recuperação para {email}.</p>
+          <p className="hint">Se {email} tiver cadastro, enviamos um código de recuperação para ele.</p>
           <Field label="código recebido">
             <input type="text" inputMode="numeric" autoComplete="one-time-code" value={codigo} onChange={(e) => setCodigo(e.target.value)} />
           </Field>
@@ -84,13 +80,6 @@ export default function RecuperarSenhaPage() {
         </form>
       )}
 
-      {etapa === 'naoencontrado' && (
-        <div>
-          <div className="box warn" role="alert" style={{ marginTop: 0 }}>Este e-mail não está cadastrado.</div>
-          <Button block onClick={recomecar} style={{ marginTop: 14 }}>Tentar outro e-mail</Button>
-          <p className="text-center" style={{ marginTop: 14, marginBottom: 0 }}><Link to="/login?aba=cadastro" className="link">ou ir para o cadastro</Link></p>
-        </div>
-      )}
     </AuthShell>
   )
 }
