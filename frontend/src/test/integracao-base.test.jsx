@@ -175,6 +175,30 @@ describe('meus agendamentos com os status do backend', () => {
   })
 })
 
+describe('sino do cliente com os avisos do salao', () => {
+  it('mostra a etiqueta curta dos avisos do salao, e nao o nome tecnico do tipo', async () => {
+    window.localStorage.setItem('cl:cliente', JSON.stringify({ token: 'token-do-gabriel', usuario: { nome: 'Gabriel Naoki' } }))
+    const agora = new Date().toISOString()
+    const fetchFalso = vi.fn(async () => resposta(200, [
+      { id: 'n1', tipo: 'HORARIO_CANCELADO_PELO_SALAO', titulo: 'Horário cancelado pelo salão', texto: 'Seu horário de Corte em 30/11 às 09:00 na Barbearia Naoki foi cancelado pelo salão.', agendamentoId: null, criadaEm: agora, lida: false },
+      { id: 'n2', tipo: 'AVISO_DO_SALAO', titulo: 'Aviso do salão', texto: 'A Barbearia Naoki não vai abrir em 01/12. Seu horário das 09:00 continua marcado.', agendamentoId: 'a1', criadaEm: agora, lida: false },
+    ]))
+    await apiReal(fetchFalso)
+    const { MemoryRouter } = await import('react-router-dom')
+    const { default: ClienteNotificationBell } = await import('../components/layout/ClienteNotificationBell')
+    const user = userEvent.setup()
+
+    render(<MemoryRouter><ClienteNotificationBell /></MemoryRouter>)
+    await user.click(await screen.findByRole('button', { name: 'Notificações, 2 não lidas' }))
+
+    const cancelado = screen.getByRole('menuitem', { name: /Horário cancelado pelo salão/ })
+    expect(within(cancelado).getByText('cancelado')).toBeInTheDocument()
+    const aviso = screen.getByRole('menuitem', { name: /Aviso do salão/ })
+    expect(within(aviso).getByText('aviso')).toBeInTheDocument()
+    expect(screen.queryByText(/HORARIO_CANCELADO_PELO_SALAO|AVISO_DO_SALAO/)).not.toBeInTheDocument()
+  })
+})
+
 describe('agendamentos do painel com os status do backend', () => {
   it('o dono aprova um pedido pendente pelo detalhe e a lista recarrega', async () => {
     window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'token-do-dono', usuario: { nome: 'Gabriel Naoki', papel: 'DONO' } }))
