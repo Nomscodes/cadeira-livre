@@ -1,5 +1,7 @@
 package br.com.cadeiralivre.api.barbearia;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -7,9 +9,12 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import br.com.cadeiralivre.api.agendamento.AgendamentoRepository;
+import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
 import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
 import br.com.cadeiralivre.api.auditoria.AuditoriaService;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
 import br.com.cadeiralivre.api.security.UsuarioLogado;
 import br.com.cadeiralivre.api.tenant.TenantContext;
 import br.com.cadeiralivre.api.usuario.Usuario;
@@ -28,6 +33,9 @@ public class ContaDoPainelService {
     private final PasswordEncoder passwordEncoder;
     private final JdbcTemplate jdbc;
     private final AuditoriaService auditoriaService;
+    private final AgendamentoRepository agendamentoRepository;
+    private final NotificacaoService notificacaoService;
+    private final Clock clock;
 
     @Transactional
     public void trocarSenha(String atual, String nova) {
@@ -41,6 +49,7 @@ public class ContaDoPainelService {
     /**
      * Apaga os agendamentos (com avaliações e notificações), os serviços, os combos e os bloqueios do salão,
      * e oculta o portal. A barbearia, a equipe e os horários continuam. Pede a senha do dono (D2).
+     * Os clientes com horário marcado recebem o aviso de que o salão cancelou (D3).
      */
     @Transactional
     public void apagarDados(String senha) {
@@ -68,6 +77,7 @@ public class ContaDoPainelService {
 
     private void apagarDadosDoSalao() {
         UUID b = TenantContext.require();
+        avisarClientesComHorarioMarcado(b);
         String agendamentos = "(select id from agendamento where barbearia_id = ?)";
         jdbc.update("delete from notificacao where agendamento_id in " + agendamentos, b);
         jdbc.update("delete from avaliacao where agendamento_id in " + agendamentos, b);
@@ -81,6 +91,16 @@ public class ContaDoPainelService {
         jdbc.update("delete from bloqueio_horario where barbearia_id = ?", b);
         jdbc.update("update barbearia set publico = false where id = ?", b);
         auditoriaService.registrar(AcaoAuditoria.PORTAL_OCULTADO, "Dados do salão apagados pelo dono");
+    }
+
+    // D3: quem tinha horário marcado (pendente ou aprovado, ainda por acontecer) fica sabendo que o salão cancelou.
+    // O aviso é criado antes de apagar, porque o texto usa os serviços e a data do agendamento.
+    private void avisarClientesComHorarioMarcado(UUID barbeariaId) {
+        LocalDateTime agora = LocalDateTime.now(clock);
+        agendamentoRepository.findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(barbeariaId).stream()
+                .filter(a -> a.getStatus() == StatusAgendamento.PENDENTE || a.getStatus() == StatusAgendamento.APROVADO)
+                .filter(a -> LocalDateTime.of(a.getData(), a.getHoraInicio()).isAfter(agora))
+                .forEach(notificacaoService::cancelamentoPeloSalao);
     }
 
     // ações que não dá para desfazer pedem a senha de quem está logado (D2)
