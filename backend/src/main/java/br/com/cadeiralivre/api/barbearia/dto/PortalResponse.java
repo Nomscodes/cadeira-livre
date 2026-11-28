@@ -35,6 +35,7 @@ public record PortalResponse(
         String atendimento,
         int cancelamentoHoras,
         boolean funcionariosEditamHorario,
+        int descansoMinutos,
         String atuacao,
         List<UUID> adminIds,
         List<ProfissionalResumo> profissionais) {
@@ -70,6 +71,7 @@ public record PortalResponse(
                 b.getAtendimento(),
                 b.getCancelamentoHoras(),
                 b.isFuncionariosEditamHorario(),
+                b.getDescansoMinutos(),
                 b.getAtuacao(),
                 profissionais.stream().filter(Profissional::isAdministrador).map(Profissional::getId).toList(),
                 profissionais.stream().map(p -> new ProfissionalResumo(p.getId(), p.getNome(), p.getUsuario() != null)).toList());
