@@ -448,7 +448,7 @@ function vincularServico(servicoId, profIds) {
 route('POST', '/painel/servicos', (ctx) => {
   const s = salaoDoStaff(requireAdmin(ctx))
   validarServico(ctx.body)
-  const v = { id: nextId('sv'), salaoId: s.id, nome: ctx.body.nome.trim(), preco: Number(ctx.body.preco), duracao: Number(ctx.body.duracao), profissionalIds: ctx.body.profissionalIds || [], destaque: true }
+  const v = { id: nextId('sv'), salaoId: s.id, nome: ctx.body.nome.trim(), preco: Number(ctx.body.preco), duracao: Number(ctx.body.duracao), profissionalIds: ctx.body.profissionalIds || [], destaque: ctx.body.destaque ?? true }
   db().servicos.push(v)
   vincularServico(v.id, v.profissionalIds)
   save()
@@ -460,6 +460,7 @@ route('PUT', '/painel/servicos/:id', (ctx) => {
   if (!v) throw new ApiError(404, 'Serviço não encontrado.')
   validarServico(ctx.body)
   Object.assign(v, { nome: ctx.body.nome.trim(), preco: Number(ctx.body.preco), duracao: Number(ctx.body.duracao), profissionalIds: ctx.body.profissionalIds || [] })
+  if (ctx.body.destaque != null) v.destaque = ctx.body.destaque // como no backend: sem o campo, fica como está
   vincularServico(v.id, v.profissionalIds)
   save()
   return v
