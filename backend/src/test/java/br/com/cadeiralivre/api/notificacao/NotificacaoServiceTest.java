@@ -185,6 +185,32 @@ class NotificacaoServiceTest {
     }
 
     @Test
+    void cancelamentoPeloSalaoGuardaOTextoSemOAgendamento() {
+        notificacaoService.cancelamentoPeloSalao(agendamento);
+
+        ArgumentCaptor<Notificacao> salva = ArgumentCaptor.forClass(Notificacao.class);
+        verify(notificacaoRepository).save(salva.capture());
+        Notificacao n = salva.getValue();
+        assertEquals(TipoNotificacao.HORARIO_CANCELADO_PELO_SALAO, n.getTipo());
+        assertSame(gabriel, n.getCliente());
+        assertNull(n.getBarbearia());
+        // o agendamento vai ser apagado: o aviso fica só com o texto, sem o nome do cliente
+        assertNull(n.getAgendamento());
+        assertEquals("Seu horário de Corte em 12/11 às 14:00 na Barbearia Teste - Gabriel Naoki foi cancelado pelo salão.",
+                n.getTexto());
+        assertEquals(agora, n.getCriadaEm());
+    }
+
+    @Test
+    void cancelamentoPeloSalaoNaoAvisaQuemAgendouSemConta() {
+        agendamento.setCliente(null);
+
+        notificacaoService.cancelamentoPeloSalao(agendamento);
+
+        verify(notificacaoRepository, never()).save(any());
+    }
+
+    @Test
     void avisoDeHorarioJaApagadoUsaOTextoGuardado() {
         // o salão apagou os dados: o agendamento não existe mais, só o texto que ficou guardado (V21)
         Notificacao n = notificacao(TipoNotificacao.HORARIO_CANCELADO_PELO_SALAO);
