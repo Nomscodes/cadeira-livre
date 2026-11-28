@@ -392,6 +392,26 @@ describe('painel do responsavel', () => {
     expect(await screen.findByText('Hidratação', {}, espera)).toBeInTheDocument()
     expect(screen.getByText(/R\$ 55,50/)).toBeInTheDocument()
   })
+  it('o dono desmarca o destaque do servico e ele sai dos destaques do portal', async () => {
+    const user = userEvent.setup()
+    await entrarAdmin()
+    const view = abrir('/painel/servicos')
+    await user.click(await screen.findByRole('button', { name: /^Barba/ }, espera))
+    const d = await screen.findByRole('dialog')
+    const destaque = within(d).getByLabelText('mostrar em Serviços em destaque no portal')
+    expect(destaque).toBeChecked() // os servicos nascem em destaque
+    await user.click(destaque)
+    await user.click(within(d).getByRole('button', { name: 'Salvar' }))
+    expect(await screen.findByText('Serviço atualizado.', {}, espera)).toBeInTheDocument()
+    expect(getDb().servicos.find((s) => s.id === 'sv2').destaque).toBe(false)
+    view.unmount()
+
+    // no portal, "Servicos em destaque" mostra so os que continuam marcados
+    abrir('/barbearia-do-rafael')
+    const secao = (await screen.findByRole('heading', { name: 'Serviços em destaque' }, espera)).closest('section')
+    expect(within(secao).getByText('Corte de cabelo')).toBeInTheDocument()
+    expect(within(secao).queryByText('Barba')).not.toBeInTheDocument()
+  })
   it('modal de servico valida campos', async () => {
     const user = userEvent.setup()
     await entrarAdmin()
