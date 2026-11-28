@@ -377,7 +377,8 @@ route('GET', '/painel/portal', (ctx) => {
   const s = salaoDoStaff(u)
   return {
     ...s,
-    profissionais: db().profissionais.filter((p) => p.salaoId === s.id).map((p) => ({ id: p.id, nome: p.nome })),
+    // temConta: o profissional já criou o login (como no backend)
+    profissionais: db().profissionais.filter((p) => p.salaoId === s.id).map((p) => ({ id: p.id, nome: p.nome, temConta: db().usuarios.some((x) => x.profissionalId === p.id) })),
   }
 })
 route('PUT', '/painel/portal', (ctx) => {
@@ -594,10 +595,12 @@ route('POST', '/painel/configuracoes/transferir-admin', (ctx) => {
   const s = salaoDoStaff(u)
   const alvo = db().profissionais.find((p) => p.id === ctx.body.profissionalId && p.salaoId === s.id)
   if (!alvo) throw new ApiError(404, 'Profissional não encontrado.')
+  // como no backend: só quem já tem conta de acesso recebe o cargo
+  const dest = db().usuarios.find((x) => x.profissionalId === alvo.id)
+  if (!dest) throw new ApiError(422, 'Este profissional ainda não tem conta de acesso. Ele precisa criar a conta com o código de convite antes.')
   s.adminIds = [alvo.id]
   u.papel = 'funcionario'
-  const dest = db().usuarios.find((x) => x.profissionalId === alvo.id)
-  if (dest) dest.papel = 'administrador'
+  dest.papel = 'administrador'
   save()
   return null
 })

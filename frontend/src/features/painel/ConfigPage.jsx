@@ -32,7 +32,8 @@ export default function ConfigPage() {
   const [senha, setSenha] = useState({ atual: '', nova: '' })
   const [erroSenha, setErroSenha] = useState('')
   const [problemas, setProblemas] = useState([])
-  const outros = salao.profissionais.filter((p) => p.id !== usuario.profissionalId)
+  // só quem já criou o login (com o código de convite) pode receber o cargo (D9)
+  const outros = salao.profissionais.filter((p) => p.id !== usuario.profissionalId && p.temConta)
 
   const salvarCfg = async () => {
     setSalvando(true)
@@ -101,7 +102,7 @@ export default function ConfigPage() {
 
   return (
     <div style={{ maxWidth: 640 }}>
-      <Field label="transferir cargo de administrador para" hint={outros.length === 0 ? 'Cadastre outro profissional para poder transferir o cargo.' : undefined}>
+      <Field label="transferir cargo de administrador para" hint={outros.length === 0 ? 'Só pode receber o cargo quem já tem conta de acesso. O profissional cria a conta com o código de convite.' : undefined}>
         <select value={transfer} onChange={(e) => setTransfer(e.target.value)} disabled={outros.length === 0}>
           <option value="">selecione um profissional</option>
           {outros.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
