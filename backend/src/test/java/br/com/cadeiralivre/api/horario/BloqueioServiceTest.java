@@ -6,10 +6,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -28,11 +32,16 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import br.com.cadeiralivre.api.agendamento.Agendamento;
+import br.com.cadeiralivre.api.agendamento.AgendamentoItem;
+import br.com.cadeiralivre.api.agendamento.AgendamentoRepository;
+import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
 import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
 import br.com.cadeiralivre.api.horario.dto.BloqueioRequest;
 import br.com.cadeiralivre.api.horario.dto.BloqueioResponse;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
 import br.com.cadeiralivre.api.profissional.Profissional;
 import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
@@ -48,6 +57,12 @@ class BloqueioServiceTest {
 
     @Mock
     private BarbeariaRepository barbeariaRepository;
+
+    @Mock
+    private AgendamentoRepository agendamentoRepository;
+
+    @Mock
+    private NotificacaoService notificacaoService;
 
     private BloqueioService bloqueioService;
 
@@ -66,13 +81,15 @@ class BloqueioServiceTest {
     @BeforeEach
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
-        bloqueioService = new BloqueioService(bloqueioRepository, profissionalRepository, barbeariaRepository, relogio);
+        bloqueioService = new BloqueioService(bloqueioRepository, profissionalRepository, barbeariaRepository,
+                agendamentoRepository, notificacaoService, relogio);
 
         // simula o que o JwtAuthenticationFilter faz com o token do dono
         TenantContext.set(minhaBarbearia);
 
         barbearia = new Barbearia();
         barbearia.setId(minhaBarbearia);
+        barbearia.setNomeFantasia("Barbearia Naoki");
     }
 
     @AfterEach
@@ -259,6 +276,27 @@ class BloqueioServiceTest {
 
         verify(bloqueioRepository).save(existente);
         assertEquals("Consciência Negra", existente.getMotivo());
+        // os clientes já foram avisados quando o dia foi fechado
+        verifyNoInteractions(agendamentoRepository, notificacaoService);
+    }
+
+    @Test
+    void fecharDiaAvisaOsClientesComHorarioMarcadoEOHorarioContinua() {
+        when(barbeariaRepository.getReferenceById(minhaBarbearia)).thenReturn(barbearia);
+        Agendamento aprovado = agendamento(feriado, LocalTime.of(10, 0), StatusAgendamento.APROVADO, profissionalDoGabriel());
+        Agendamento pendente = agendamento(feriado, catorzeHoras, StatusAgendamento.PENDENTE, profissionalDoGabriel());
+        Agendamento cancelado = agendamento(feriado, dezesseisHoras, StatusAgendamento.CANCELADO, profissionalDoGabriel());
+        when(agendamentoRepository.findAllByBarbeariaIdAndDataOrderByHoraInicioAscProfissionalNomeAsc(minhaBarbearia, feriado))
+                .thenReturn(List.of(aprovado, pendente, cancelado));
+
+        bloqueioService.fecharDia(feriado, "Consciência Negra");
+
+        verify(notificacaoService).avisoDoSalao(aprovado, "A Barbearia Naoki não vai abrir em 20/11 (Consciência Negra)."
+                + " Seu horário das 10:00 continua marcado: fale com o salão para remarcar.");
+        verify(notificacaoService).avisoDoSalao(eq(pendente), anyString());
+        verify(notificacaoService, never()).avisoDoSalao(eq(cancelado), anyString());
+        // D1: o horário não é cancelado
+        assertEquals(StatusAgendamento.APROVADO, aprovado.getStatus());
     }
 
     @Test
@@ -295,6 +333,25 @@ class BloqueioServiceTest {
     }
 
     @Test
+    void darFolgaAvisaSoQuemTemHorarioComOProfissionalESemOMotivo() {
+        Profissional gabriel = profissionalDoGabriel();
+        gabriel.setNomeSocial("Naoki");
+        when(profissionalRepository.findByIdAndBarbeariaId(gabriel.getId(), minhaBarbearia)).thenReturn(Optional.of(gabriel));
+        when(barbeariaRepository.getReferenceById(minhaBarbearia)).thenReturn(barbearia);
+        Agendamento comEle = agendamento(feriado, LocalTime.of(10, 0), StatusAgendamento.APROVADO, gabriel);
+        Agendamento comOutro = agendamento(feriado, catorzeHoras, StatusAgendamento.APROVADO, profissionalDoGabriel());
+        when(agendamentoRepository.findAllByBarbeariaIdAndDataOrderByHoraInicioAscProfissionalNomeAsc(minhaBarbearia, feriado))
+                .thenReturn(List.of(comEle, comOutro));
+
+        bloqueioService.darFolga(gabriel.getId(), feriado, "Consulta médica");
+
+        // o motivo da folga é do profissional e não aparece para o cliente
+        verify(notificacaoService).avisoDoSalao(comEle, "Naoki não vai atender em 20/11. Seu horário das 10:00"
+                + " na Barbearia Naoki continua marcado: fale com o salão para remarcar.");
+        verify(notificacaoService, never()).avisoDoSalao(eq(comOutro), anyString());
+    }
+
+    @Test
     void folgaDeProfissionalDeOutroSalaoDevolve404() {
         UUID deOutroSalao = UUID.randomUUID();
         when(profissionalRepository.findByIdAndBarbeariaId(deOutroSalao, minhaBarbearia)).thenReturn(Optional.empty());
@@ -316,6 +373,22 @@ class BloqueioServiceTest {
         bloqueioService.tirarFolga(gabriel.getId(), feriado);
 
         verify(bloqueioRepository).deleteAll(List.of(folga));
+    }
+
+    private Agendamento agendamento(LocalDate data, LocalTime hora, StatusAgendamento status, Profissional quem) {
+        Agendamento a = new Agendamento();
+        a.setId(UUID.randomUUID());
+        a.setBarbearia(barbearia);
+        a.setData(data);
+        a.setHoraInicio(hora);
+        a.setStatus(status);
+        AgendamentoItem item = new AgendamentoItem();
+        item.setNome("Corte");
+        item.setProfissional(quem);
+        item.setPreco(new BigDecimal("40.00"));
+        item.setDuracaoMinutos(30);
+        a.adicionarItem(item);
+        return a;
     }
 
     private Profissional profissionalDoGabriel() {
