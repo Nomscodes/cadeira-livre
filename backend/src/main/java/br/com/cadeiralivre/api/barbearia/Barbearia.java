@@ -90,6 +90,10 @@ public class Barbearia {
     @Column(name = "funcionarios_editam_horario", nullable = false)
     private boolean funcionariosEditamHorario = false;
 
+    // duração do descanso que o funcionário marca na agenda: 15, 30, 45 ou 60 minutos (D8)
+    @Column(name = "descanso_minutos", nullable = false)
+    private int descansoMinutos = 60;
+
     // autonomo (o dono também atende) ou equipe (o dono só gerencia)
     @Column(nullable = false, length = 10)
     private String atuacao = "autonomo";
