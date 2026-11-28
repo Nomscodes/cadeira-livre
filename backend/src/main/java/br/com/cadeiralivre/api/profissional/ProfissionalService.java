@@ -1,6 +1,9 @@
 package br.com.cadeiralivre.api.profissional;
 
 import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -10,8 +13,12 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import br.com.cadeiralivre.api.agendamento.Agendamento;
+import br.com.cadeiralivre.api.agendamento.AgendamentoRepository;
+import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
 import br.com.cadeiralivre.api.barbearia.BarbeariaRepository;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
 import br.com.cadeiralivre.api.profissional.dto.ProfissionalRequest;
 import br.com.cadeiralivre.api.profissional.dto.ProfissionalResponse;
 import br.com.cadeiralivre.api.servico.Combo;
@@ -32,12 +39,17 @@ public class ProfissionalService {
     // letras e números sem os que se confundem (0/O, 1/I)
     private static final String LETRAS_DO_CONVITE = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     private static final SecureRandom SORTEIO = new SecureRandom();
+    private static final DateTimeFormatter DIA = DateTimeFormatter.ofPattern("dd/MM");
+    private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
 
     private final ProfissionalRepository profissionalRepository;
     private final ProfissionalHorarioRepository horarioRepository;
     private final ServicoRepository servicoRepository;
     private final ComboRepository comboRepository;
     private final BarbeariaRepository barbeariaRepository;
+    private final AgendamentoRepository agendamentoRepository;
+    private final NotificacaoService notificacaoService;
+    private final Clock clock;
 
     /** Profissionais ativos do salão, com o horário de cada um. */
     @Transactional(readOnly = true)
@@ -77,7 +89,10 @@ public class ProfissionalService {
                 ProfissionalResponse.de(p, horarioRepository.findAllByProfissionalId(p.getId())), null);
     }
 
-    /** O DELETE desativa o profissional e o tira dos serviços e dos combos. O único administrador não pode sair. */
+    /**
+     * O DELETE desativa o profissional e o tira dos serviços e dos combos. O único administrador não pode sair.
+     * Os horários já marcados com ele continuam, e os clientes recebem um aviso (D1).
+     */
     @Transactional
     public void excluir(UUID id) {
         Profissional p = buscar(id);
@@ -88,6 +103,21 @@ public class ProfissionalService {
         p.setCodigoConvite(null);
         p.getServicos().clear();
         tirarDosCombos(p);
+        avisarClientesComHorarioMarcado(p);
+    }
+
+    // horários com ele que ainda vão acontecer (pendentes ou aprovados): o cliente fica sabendo e fala com o salão
+    private void avisarClientesComHorarioMarcado(Profissional p) {
+        LocalDateTime agora = LocalDateTime.now(clock);
+        String nome = p.getNomeSocial() != null ? p.getNomeSocial() : p.getNome();
+        for (Agendamento a : agendamentoRepository.doProfissional(p.getId())) {
+            boolean ativo = a.getStatus() == StatusAgendamento.PENDENTE || a.getStatus() == StatusAgendamento.APROVADO;
+            boolean aindaVaiAcontecer = LocalDateTime.of(a.getData(), a.getHoraInicio()).isAfter(agora);
+            if (!ativo || !aindaVaiAcontecer) continue;
+            notificacaoService.avisoDoSalao(a, nome + " não faz mais parte da equipe da " + a.getBarbearia().getNomeFantasia()
+                    + ". Seu horário de " + a.getData().format(DIA) + " às " + a.getHoraInicio().format(HORA)
+                    + " continua marcado: fale com o salão para remarcar.");
+        }
     }
 
     private Profissional buscar(UUID id) {
