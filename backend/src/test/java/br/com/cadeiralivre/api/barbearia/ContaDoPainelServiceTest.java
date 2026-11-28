@@ -13,6 +13,11 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,7 +28,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,9 +36,13 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import br.com.cadeiralivre.api.agendamento.Agendamento;
+import br.com.cadeiralivre.api.agendamento.AgendamentoRepository;
+import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
 import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
 import br.com.cadeiralivre.api.auditoria.AuditoriaService;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
 import br.com.cadeiralivre.api.tenant.TenantContext;
 import br.com.cadeiralivre.api.usuario.DonoBarbearia;
 import br.com.cadeiralivre.api.usuario.UsuarioRepository;
@@ -54,7 +62,15 @@ class ContaDoPainelServiceTest {
     @Mock
     private AuditoriaService auditoriaService;
 
-    @InjectMocks
+    @Mock
+    private AgendamentoRepository agendamentoRepository;
+
+    @Mock
+    private NotificacaoService notificacaoService;
+
+    // "Agora" fixo nos testes: 10/11/2026 às 09:00 no horário de Brasília
+    private final Clock relogio = Clock.fixed(Instant.parse("2026-11-10T12:00:00Z"), ZoneId.of("America/Sao_Paulo"));
+
     private ContaDoPainelService contaService;
 
     private final UUID barbeariaId = UUID.randomUUID();
@@ -62,6 +78,9 @@ class ContaDoPainelServiceTest {
 
     @BeforeEach
     void logarComoDono() {
+        // o Clock não é mock, por isso o service é criado na mão
+        contaService = new ContaDoPainelService(usuarioRepository, passwordEncoder, jdbc, auditoriaService,
+                agendamentoRepository, notificacaoService, relogio);
         gabriel.setId(UUID.randomUUID());
         gabriel.setNome("Gabriel Naoki");
         gabriel.setSenhaHash("hash-antigo");
@@ -142,7 +161,7 @@ class ContaDoPainelServiceTest {
 
         assertEquals(422, erro.getStatus().value());
         assertEquals("A senha está incorreta.", erro.getMessage());
-        verifyNoInteractions(jdbc, auditoriaService);
+        verifyNoInteractions(jdbc, auditoriaService, notificacaoService);
     }
 
     @Test
@@ -153,7 +172,49 @@ class ContaDoPainelServiceTest {
         ApiException erro = assertThrows(ApiException.class, () -> contaService.encerrarConta("errada"));
 
         assertEquals("A senha está incorreta.", erro.getMessage());
-        verifyNoInteractions(jdbc, auditoriaService);
+        verifyNoInteractions(jdbc, auditoriaService, notificacaoService);
+    }
+
+    @Test
+    void apagarDadosAvisaAntesOsClientesComHorarioMarcado() {
+        senhaCerta();
+        Agendamento aprovadoAmanha = agendamento(LocalDate.of(2026, 11, 11), StatusAgendamento.APROVADO);
+        Agendamento pendenteAmanha = agendamento(LocalDate.of(2026, 11, 11), StatusAgendamento.PENDENTE);
+        Agendamento canceladoAmanha = agendamento(LocalDate.of(2026, 11, 11), StatusAgendamento.CANCELADO);
+        Agendamento concluidoOntem = agendamento(LocalDate.of(2026, 11, 9), StatusAgendamento.CONCLUIDO);
+        when(agendamentoRepository.findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(barbeariaId))
+                .thenReturn(List.of(aprovadoAmanha, pendenteAmanha, canceladoAmanha, concluidoOntem));
+
+        contaService.apagarDados("12345678");
+
+        // só quem ainda ia ser atendido recebe o aviso, e o aviso sai antes de apagar os agendamentos
+        InOrder ordem = inOrder(notificacaoService, jdbc);
+        ordem.verify(notificacaoService).cancelamentoPeloSalao(aprovadoAmanha);
+        ordem.verify(notificacaoService).cancelamentoPeloSalao(pendenteAmanha);
+        ordem.verify(jdbc).update("delete from agendamento where barbearia_id = ?", barbeariaId);
+        verify(notificacaoService, never()).cancelamentoPeloSalao(canceladoAmanha);
+        verify(notificacaoService, never()).cancelamentoPeloSalao(concluidoOntem);
+    }
+
+    @Test
+    void encerrarContaTambemAvisaOsClientes() {
+        senhaCerta();
+        Agendamento aprovadoAmanha = agendamento(LocalDate.of(2026, 11, 11), StatusAgendamento.APROVADO);
+        when(agendamentoRepository.findAllByBarbeariaIdOrderByDataDescHoraInicioDesc(barbeariaId))
+                .thenReturn(List.of(aprovadoAmanha));
+
+        contaService.encerrarConta("12345678");
+
+        verify(notificacaoService).cancelamentoPeloSalao(aprovadoAmanha);
+    }
+
+    private Agendamento agendamento(LocalDate data, StatusAgendamento status) {
+        Agendamento a = new Agendamento();
+        a.setId(UUID.randomUUID());
+        a.setData(data);
+        a.setHoraInicio(LocalTime.of(10, 0));
+        a.setStatus(status);
+        return a;
     }
 
     // a senha digitada confere com o hash da conta logada
