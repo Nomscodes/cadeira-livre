@@ -38,8 +38,9 @@ public class Notificacao {
     @Column(nullable = false, length = 30)
     private TipoNotificacao tipo;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "agendamento_id", nullable = false)
+    // null só no aviso do salão de um horário que já foi apagado (V21): aí o texto fica guardado
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agendamento_id")
     private Agendamento agendamento;
 
     // para quem é: o dono da barbearia ou o cliente (só um dos dois fica preenchido)

@@ -19,7 +19,11 @@ public enum TipoNotificacao {
     HORARIO_RECUSADO("Pedido não aceito"),
     ATENDIMENTO_CONCLUIDO("Como foi seu atendimento?"),
     LEMBRETE_CLIENTE("Seu horário é amanhã"),
-    PEDIDO_AVALIACAO("O salão pediu sua avaliação");
+    PEDIDO_AVALIACAO("O salão pediu sua avaliação"),
+    // texto guardado: o salão apagou os dados ou encerrou a conta e o horário deixou de existir (D3)
+    HORARIO_CANCELADO_PELO_SALAO("Horário cancelado pelo salão"),
+    // texto guardado: o salão fechou o dia, deu folga ou desativou o profissional; o horário continua marcado (D1)
+    AVISO_DO_SALAO("Aviso do salão");
 
     private final String titulo;
 
