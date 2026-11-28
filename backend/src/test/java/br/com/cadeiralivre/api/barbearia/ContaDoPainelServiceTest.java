@@ -10,6 +10,7 @@ import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
@@ -100,7 +101,9 @@ class ContaDoPainelServiceTest {
 
     @Test
     void apagarDadosApagaPrimeiroOQueDependeEOcultaOPortal() {
-        contaService.apagarDados();
+        senhaCerta();
+
+        contaService.apagarDados("12345678");
 
         ArgumentCaptor<String> sqls = ArgumentCaptor.forClass(String.class);
         verify(jdbc, atLeastOnce()).update(sqls.capture(), eq(barbeariaId));
@@ -117,7 +120,9 @@ class ContaDoPainelServiceTest {
 
     @Test
     void encerrarContaApagaOsDadosAEquipeODonoEPorUltimoABarbearia() {
-        contaService.encerrarConta();
+        senhaCerta();
+
+        contaService.encerrarConta("12345678");
 
         InOrder ordem = inOrder(jdbc);
         ordem.verify(jdbc).update("delete from agendamento where barbearia_id = ?", barbeariaId);
@@ -126,5 +131,34 @@ class ContaDoPainelServiceTest {
         ordem.verify(jdbc).update("delete from usuario where id in (select id from funcionario where barbearia_id = ?)", barbeariaId);
         ordem.verify(jdbc).update("delete from usuario where id in (select id from dono_barbearia where barbearia_id = ?)", barbeariaId);
         ordem.verify(jdbc).update("delete from barbearia where id = ?", barbeariaId);
+    }
+
+    @Test
+    void apagarDadosComSenhaErradaNaoApagaNada() {
+        when(usuarioRepository.findById(gabriel.getId())).thenReturn(Optional.of(gabriel));
+        when(passwordEncoder.matches("errada", "hash-antigo")).thenReturn(false);
+
+        ApiException erro = assertThrows(ApiException.class, () -> contaService.apagarDados("errada"));
+
+        assertEquals(422, erro.getStatus().value());
+        assertEquals("A senha está incorreta.", erro.getMessage());
+        verifyNoInteractions(jdbc, auditoriaService);
+    }
+
+    @Test
+    void encerrarContaComSenhaErradaNaoApagaNada() {
+        when(usuarioRepository.findById(gabriel.getId())).thenReturn(Optional.of(gabriel));
+        when(passwordEncoder.matches("errada", "hash-antigo")).thenReturn(false);
+
+        ApiException erro = assertThrows(ApiException.class, () -> contaService.encerrarConta("errada"));
+
+        assertEquals("A senha está incorreta.", erro.getMessage());
+        verifyNoInteractions(jdbc, auditoriaService);
+    }
+
+    // a senha digitada confere com o hash da conta logada
+    private void senhaCerta() {
+        when(usuarioRepository.findById(gabriel.getId())).thenReturn(Optional.of(gabriel));
+        when(passwordEncoder.matches("12345678", "hash-antigo")).thenReturn(true);
     }
 }
