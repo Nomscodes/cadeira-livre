@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -103,6 +104,44 @@ class AlertaDoFuncionarioServiceTest {
         assertEquals(422, erro.getStatus().value());
         assertEquals("Escolha o motivo do alerta.", erro.getMessage());
         verify(notificacaoRepository, never()).save(any());
+    }
+
+    @Test
+    void motivoForaDaListaEhRecusado() {
+        ApiException erro = assertThrows(ApiException.class,
+                () -> service.alertar(agendamento.getId(), "Qualquer motivo inventado", null));
+
+        assertEquals(422, erro.getStatus().value());
+        assertEquals("Escolha um dos motivos da lista.", erro.getMessage());
+        verify(notificacaoRepository, never()).save(any());
+    }
+
+    @Test
+    void descricaoComMaisDe300CaracteresEhRecusada() {
+        ApiException erro = assertThrows(ApiException.class,
+                () -> service.alertar(agendamento.getId(), "Cliente agressivo", "a".repeat(301)));
+
+        assertEquals(422, erro.getStatus().value());
+        assertEquals("A descrição pode ter até 300 caracteres.", erro.getMessage());
+        verify(notificacaoRepository, never()).save(any());
+    }
+
+    @Test
+    void textoComNomesLongosCabeNaColunaDe500() {
+        // nome do profissional e do cliente no tamanho máximo (120) e descrição no limite (300)
+        naoki.setNome("N".repeat(120));
+        agendamento.setClienteNome("G".repeat(120));
+        agendamento.adicionarItem(item(naoki));
+        when(agendamentoRepository.findByIdAndBarbeariaId(agendamento.getId(), barbearia.getId()))
+                .thenReturn(Optional.of(agendamento));
+
+        service.alertar(agendamento.getId(), "Não me sinto seguro(a) com esse cliente", "d".repeat(300));
+
+        ArgumentCaptor<Notificacao> salva = ArgumentCaptor.forClass(Notificacao.class);
+        verify(notificacaoRepository).save(salva.capture());
+        String texto = salva.getValue().getTexto();
+        assertEquals(500, texto.length());
+        assertTrue(texto.endsWith("..."));
     }
 
     @Test
