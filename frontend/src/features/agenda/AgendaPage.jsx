@@ -46,7 +46,7 @@ function AlertaModal({ agendamento, onClose }) {
       <FieldGroup label="motivo" error={erro}>
         {MOTIVOS.map((m) => <label className="check-row" key={m}><input type="radio" name="motivo" checked={motivo === m} onChange={() => { setMotivo(m); setErro('') }} /> {m}</label>)}
       </FieldGroup>
-      <Field label="descreva com suas palavras (opcional)"><textarea rows={3} value={descricao} onChange={(e) => setDescricao(e.target.value)} maxLength={500} /></Field>
+      <Field label="descreva com suas palavras (opcional)"><textarea rows={3} value={descricao} onChange={(e) => setDescricao(e.target.value)} maxLength={300} /></Field>
       <div className="modal-actions">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button loading={busy} onClick={enviar}>Enviar alerta</Button>
@@ -182,9 +182,6 @@ export default function AgendaPage() {
     catch (e) { setData(antes); toast.error(e.message) }
   }
 
-  // o agendamento do calendario vem em outro formato: completa para o detalhe
-  const abrirDoCalendario = (ag) => setDetalhe({ ...ag, status: 'confirmado' })
-
   if (resumo.loading && !resumo.data) return <Frame><Loading /></Frame>
   if (resumo.error) return <Frame><div className="screen-pad"><ErrorState error={resumo.error} onRetry={resumo.reload} /></div></Frame>
 
@@ -268,7 +265,11 @@ export default function AgendaPage() {
                       <div className="slots">
                         {horas.map((h) => {
                           const st = statusDoSlot(h)
-                          if (st.tipo === 'agendado') return <button key={h} type="button" className="slot booked" onClick={() => abrirDoCalendario(st.ag)}>{h}<small>agendado</small></button>
+                          if (st.tipo === 'agendado') {
+                            // pendente ainda espera o dono aprovar: aparece diferente e não conta como horário ocupado
+                            const pendente = st.ag.status === 'PENDENTE'
+                            return <button key={h} type="button" className={pendente ? 'slot pending' : 'slot booked'} onClick={() => setDetalhe(st.ag)}>{h}<small>{pendente ? 'pendente' : 'agendado'}</small></button>
+                          }
                           if (st.tipo === 'almoco') return <div key={h} className="slot rest static" aria-label={`${h}, almoço`}>{h}<small>almoço</small></div>
                           if (st.tipo === 'descanso') {
                             return modoEdicao
@@ -283,6 +284,7 @@ export default function AgendaPage() {
                       <div className="cal-legend" aria-hidden="true" style={{ padding: '12px 0 0', border: 0 }}>
                         <span><i className="legend-dot" />livre</span>
                         <span><i className="legend-dot busy" />agendado</span>
+                        <span><i className="legend-dot pending" />pendente</span>
                         <span><i className="legend-dot off" />descanso</span>
                       </div>
                     </>
