@@ -1,5 +1,6 @@
 package br.com.cadeiralivre.api.auth;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -80,13 +81,12 @@ class RecuperacaoSenhaServiceTest {
     }
 
     @Test
-    void emailNaoCadastradoDevolve404() {
+    void emailNaoCadastradoRespondeIgualSemGerarCodigo() {
         when(usuarioRepository.findByEmailHash(criptografia.hash("ninguem@teste.com"))).thenReturn(Optional.empty());
 
-        ApiException erro = assertThrows(ApiException.class, () -> service.solicitar("ninguem@teste.com"));
+        // não dá erro: a resposta é a mesma de um e-mail cadastrado (D10)
+        assertDoesNotThrow(() -> service.solicitar("ninguem@teste.com"));
 
-        assertEquals(404, erro.getStatus().value());
-        assertEquals("Este e-mail não está cadastrado.", erro.getMessage());
         verify(recuperacaoRepository, never()).save(any());
     }
 
