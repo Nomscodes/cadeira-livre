@@ -470,6 +470,33 @@ describe('agenda do funcionario', () => {
       expect(await screen.findByText('Alerta enviado ao responsável.', {}, espera)).toBeInTheDocument()
     }
   })
+  it('mostra o status que vem da API e o pedido pendente diferente do agendado', async () => {
+    const user = userEvent.setup()
+    // o primeiro agendamento do Rafael passa a ser um pedido que o dono ainda não aprovou
+    const ag = getDb().agendamentos.find((a) => a.id === 'a1')
+    ag.status = 'PENDENTE'
+    save()
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-func', usuario: { id: 'u-func', nome: 'Rafael Lima', papel: 'FUNCIONARIO', barbeariaId: 's1', profissionalId: 'p1' } }))
+    abrir('/agenda')
+    const cal = await screen.findByRole('group', { name: 'Escolha o dia' }, espera)
+    // o pedido pode cair no mês seguinte
+    const hoje = new Date()
+    const mesAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+    if (!ag.data.startsWith(mesAtual)) await user.click(within(cal).getByRole('button', { name: 'Próximo mês' }))
+    await user.click(within(cal).getByRole('button', { name: new RegExp(`^${Number(ag.data.slice(8))} de `) }))
+
+    const slot = await screen.findByRole('button', { name: /10:00\s*pendente/ }, espera)
+    expect(slot).toHaveClass('pending')
+    await user.click(slot)
+    const dlg = await screen.findByRole('dialog')
+    expect(within(dlg).getByText('pendente')).toBeInTheDocument()
+    expect(within(dlg).queryByText('confirmado')).not.toBeInTheDocument()
+
+    // a descrição do alerta segue o limite do backend (300 caracteres)
+    await user.click(within(dlg).getByRole('button', { name: 'Alertar sobre este cliente' }))
+    const alerta = await screen.findByRole('dialog')
+    expect(within(alerta).getByLabelText(/descreva com suas palavras/)).toHaveAttribute('maxLength', '300')
+  })
 })
 
 describe('historico do cliente', () => {
