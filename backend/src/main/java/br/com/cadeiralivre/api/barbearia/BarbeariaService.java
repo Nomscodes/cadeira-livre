@@ -1,6 +1,8 @@
 package br.com.cadeiralivre.api.barbearia;
 
 import java.text.Normalizer;
+import java.time.Clock;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +31,11 @@ import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
 import br.com.cadeiralivre.api.servico.dto.ComboResponse;
 import br.com.cadeiralivre.api.servico.dto.ServicoResponse;
+import br.com.cadeiralivre.api.security.SessaoRepository;
+import br.com.cadeiralivre.api.security.UsuarioLogado;
 import br.com.cadeiralivre.api.tenant.TenantContext;
+import br.com.cadeiralivre.api.usuario.Papel;
+import br.com.cadeiralivre.api.usuario.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 
 /** Portal público (leitura por slug) e customização white-label (escrita pelo dono, via tenant do JWT). */
@@ -45,6 +51,9 @@ public class BarbeariaService {
     private final ProfissionalHorarioRepository profissionalHorarioRepository;
     private final ComboRepository comboRepository;
     private final AuditoriaService auditoriaService;
+    private final UsuarioRepository usuarioRepository;
+    private final SessaoRepository sessaoRepository;
+    private final Clock clock;
 
     /** Chamado no cadastro do dono. Nasce oculta (publico = false) até o dono publicar. */
     @Transactional
@@ -166,17 +175,45 @@ public class BarbeariaService {
                 + " | cancelamento até " + cancelamentoHoras + " h antes");
     }
 
-    /** Passa o cargo de administrador para outro profissional do salão: ele vira o único administrador. */
+    /**
+     * Passa o cargo de administrador para outro profissional do salão (RF28 / D9). Só vale para quem já tem
+     * conta de acesso. O escolhido vira o único administrador e passa a entrar no painel (papel DONO);
+     * quem transferiu passa a ver só a própria agenda (papel FUNCIONARIO). As sessões dos dois são
+     * encerradas, então os dois entram de novo já com o papel novo.
+     */
     @Transactional
     public void transferirAdministrador(UUID profissionalId) {
         Barbearia b = buscarDoTenant();
+        UUID quemTransfereId = UsuarioLogado.usuarioId();
         List<Profissional> profissionais = profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId());
         Profissional novo = profissionais.stream()
                 .filter(p -> p.isAtivo() && p.getId().equals(profissionalId))
                 .findFirst()
                 .orElseThrow(() -> ApiException.naoEncontrado("Profissional não encontrado."));
+        if (novo.getUsuario() == null) {
+            throw ApiException.invalido("Este profissional ainda não tem conta de acesso. "
+                    + "Ele precisa criar a conta com o código de convite antes.");
+        }
+        UUID novoDonoId = novo.getUsuario().getId();
+        if (novoDonoId.equals(quemTransfereId)) throw ApiException.invalido("Você já é o administrador do salão.");
+        boolean novoEraFuncionario = novo.getUsuario().getPapel() == Papel.FUNCIONARIO;
+
         profissionais.forEach(p -> p.setAdministrador(p == novo));
         auditoriaService.registrar(AcaoAuditoria.PORTAL_ALTERADO, "Administrador transferido para " + novo.getNome());
+
+        // troca o papel do login: quem recebeu vai para o painel e quem transferiu vai para a agenda
+        if (novoEraFuncionario) {
+            usuarioRepository.copiarFuncionarioParaDono(novoDonoId);
+            usuarioRepository.apagarFuncionario(novoDonoId);
+            usuarioRepository.trocarPapel(novoDonoId, Papel.DONO.name());
+        }
+        usuarioRepository.copiarDonoParaFuncionario(quemTransfereId);
+        usuarioRepository.apagarDono(quemTransfereId);
+        usuarioRepository.trocarPapel(quemTransfereId, Papel.FUNCIONARIO.name());
+
+        Instant agora = Instant.now(clock);
+        sessaoRepository.encerrarTodasDoUsuario(novoDonoId, agora);
+        sessaoRepository.encerrarTodasDoUsuario(quemTransfereId, agora);
     }
 
     /**

@@ -8,12 +8,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.LocalTime;
 import java.util.List;
@@ -24,9 +26,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import br.com.cadeiralivre.api.auditoria.AcaoAuditoria;
 import br.com.cadeiralivre.api.auditoria.AuditoriaService;
@@ -43,7 +49,11 @@ import br.com.cadeiralivre.api.profissional.ProfissionalRepository;
 import br.com.cadeiralivre.api.servico.ComboRepository;
 import br.com.cadeiralivre.api.servico.Servico;
 import br.com.cadeiralivre.api.servico.ServicoRepository;
+import br.com.cadeiralivre.api.security.SessaoRepository;
 import br.com.cadeiralivre.api.tenant.TenantContext;
+import br.com.cadeiralivre.api.usuario.DonoBarbearia;
+import br.com.cadeiralivre.api.usuario.Funcionario;
+import br.com.cadeiralivre.api.usuario.UsuarioRepository;
 
 @ExtendWith(MockitoExtension.class)
 class BarbeariaServiceTest {
@@ -71,6 +81,12 @@ class BarbeariaServiceTest {
 
     @Mock
     private AuditoriaService auditoriaService;
+    @Mock
+    private UsuarioRepository usuarioRepository;
+    @Mock
+    private SessaoRepository sessaoRepository;
+    @Mock
+    private Clock clock;
 
     @InjectMocks
     private BarbeariaService barbeariaService;
@@ -78,6 +94,7 @@ class BarbeariaServiceTest {
     @AfterEach
     void limparTenant() {
         TenantContext.clear();
+        SecurityContextHolder.clearContext();
     }
 
     // ---------- criação e portal público ----------
@@ -425,16 +442,66 @@ class BarbeariaServiceTest {
     }
 
     @Test
-    void transferirAdministradorDeixaSoOEscolhidoComoAdministrador() {
+    void transferirAdministradorTrocaOCargoEOPapelDosDois() {
         Barbearia b = logarComoDonoDe(barbearia(true));
         Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        gabriel.setUsuario(dono(b));
         Profissional diego = profissional(b, "Diego Santos", false);
+        diego.setUsuario(funcionario(b));
         when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(diego, gabriel));
+        UUID gabrielId = gabriel.getUsuario().getId();
+        UUID diegoId = diego.getUsuario().getId();
+        logarComoUsuario(gabrielId);
 
         barbeariaService.transferirAdministrador(diego.getId());
 
+        // o cargo fica só com o escolhido
         assertTrue(diego.isAdministrador());
         assertFalse(gabriel.isAdministrador());
+        // Diego passa para o painel e Gabriel para a agenda, nessa ordem: copia, apaga a linha antiga e troca o papel
+        InOrder ordem = inOrder(usuarioRepository);
+        ordem.verify(usuarioRepository).copiarFuncionarioParaDono(diegoId);
+        ordem.verify(usuarioRepository).apagarFuncionario(diegoId);
+        ordem.verify(usuarioRepository).trocarPapel(diegoId, "DONO");
+        ordem.verify(usuarioRepository).copiarDonoParaFuncionario(gabrielId);
+        ordem.verify(usuarioRepository).apagarDono(gabrielId);
+        ordem.verify(usuarioRepository).trocarPapel(gabrielId, "FUNCIONARIO");
+        // os dois saem e entram de novo com o papel novo
+        verify(sessaoRepository).encerrarTodasDoUsuario(eq(diegoId), any());
+        verify(sessaoRepository).encerrarTodasDoUsuario(eq(gabrielId), any());
+    }
+
+    @Test
+    void naoTransfereParaQuemNaoTemContaDeAcesso() {
+        Barbearia b = logarComoDonoDe(barbearia(true));
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        gabriel.setUsuario(dono(b));
+        Profissional semConta = profissional(b, "Diego Santos", false); // ainda não usou o código de convite
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(semConta, gabriel));
+        logarComoUsuario(gabriel.getUsuario().getId());
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> barbeariaService.transferirAdministrador(semConta.getId()));
+
+        assertEquals(422, erro.getStatus().value());
+        assertTrue(erro.getMessage().startsWith("Este profissional ainda não tem conta de acesso."));
+        assertTrue(gabriel.isAdministrador());
+        verifyNoInteractions(usuarioRepository, sessaoRepository, auditoriaService);
+    }
+
+    @Test
+    void naoTransfereParaSiMesmo() {
+        Barbearia b = logarComoDonoDe(barbearia(true));
+        Profissional gabriel = profissional(b, "Gabriel Naoki", true);
+        gabriel.setUsuario(dono(b));
+        when(profissionalRepository.findAllByBarbeariaIdOrderByNome(b.getId())).thenReturn(List.of(gabriel));
+        logarComoUsuario(gabriel.getUsuario().getId());
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> barbeariaService.transferirAdministrador(gabriel.getId()));
+
+        assertEquals("Você já é o administrador do salão.", erro.getMessage());
+        verifyNoInteractions(usuarioRepository, sessaoRepository);
     }
 
     @Test
@@ -491,6 +558,26 @@ class BarbeariaServiceTest {
         p.setNome(nome);
         p.setAdministrador(administrador);
         return p;
+    }
+
+    private DonoBarbearia dono(Barbearia b) {
+        DonoBarbearia d = new DonoBarbearia();
+        d.setId(UUID.randomUUID());
+        d.setBarbearia(b);
+        return d;
+    }
+
+    private Funcionario funcionario(Barbearia b) {
+        Funcionario f = new Funcionario();
+        f.setId(UUID.randomUUID());
+        f.setBarbearia(b);
+        return f;
+    }
+
+    // o JwtAuthenticationFilter guarda o id do usuário como "nome" da autenticação
+    private void logarComoUsuario(UUID usuarioId) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                usuarioId.toString(), null, List.of(new SimpleGrantedAuthority("ROLE_DONO"))));
     }
 
     private HorarioFuncionamento horario(Barbearia b, DayOfWeek dia, boolean ativo) {

@@ -45,7 +45,8 @@ public record PortalResponse(
     public record Dia(boolean ativo, String inicio, String fim) {
     }
 
-    public record ProfissionalResumo(UUID id, String nome) {
+    // temConta: o profissional já criou o login (só ele pode receber o cargo de administrador)
+    public record ProfissionalResumo(UUID id, String nome, boolean temConta) {
     }
 
     public static PortalResponse de(Barbearia b, List<BarbeariaFoto> fotos, List<HorarioFuncionamento> horarios,
@@ -71,7 +72,7 @@ public record PortalResponse(
                 b.isFuncionariosEditamHorario(),
                 b.getAtuacao(),
                 profissionais.stream().filter(Profissional::isAdministrador).map(Profissional::getId).toList(),
-                profissionais.stream().map(p -> new ProfissionalResumo(p.getId(), p.getNome())).toList());
+                profissionais.stream().map(p -> new ProfissionalResumo(p.getId(), p.getNome(), p.getUsuario() != null)).toList());
     }
 
     // os 7 dias sempre aparecem; dia sem horário cadastrado vem fechado, com 09:00–18:00 sugerido (igual ao front)
