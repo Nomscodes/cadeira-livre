@@ -31,9 +31,7 @@ public class ContaDoPainelService {
 
     @Transactional
     public void trocarSenha(String atual, String nova) {
-        UUID usuarioId = UsuarioLogado.usuarioId();
-        Usuario usuario = usuarioId == null ? null : usuarioRepository.findById(usuarioId).orElse(null);
-        if (usuario == null) throw ApiException.naoAutorizado("Faça login para continuar.");
+        Usuario usuario = usuarioLogado();
         if (!passwordEncoder.matches(atual, usuario.getSenhaHash())) {
             throw ApiException.invalido("A senha atual está incorreta.");
         }
@@ -42,10 +40,33 @@ public class ContaDoPainelService {
 
     /**
      * Apaga os agendamentos (com avaliações e notificações), os serviços, os combos e os bloqueios do salão,
-     * e oculta o portal. A barbearia, a equipe e os horários continuam.
+     * e oculta o portal. A barbearia, a equipe e os horários continuam. Pede a senha do dono (D2).
      */
     @Transactional
-    public void apagarDados() {
+    public void apagarDados(String senha) {
+        conferirSenha(senha);
+        apagarDadosDoSalao();
+    }
+
+    /**
+     * Encerra a conta: apaga os dados do salão, a equipe, os horários, as fotos, a conta do dono (com as sessões)
+     * e a barbearia. Fica só o registro da auditoria, que não guarda dados pessoais. Pede a senha do dono (D2).
+     */
+    @Transactional
+    public void encerrarConta(String senha) {
+        conferirSenha(senha);
+        UUID b = TenantContext.require();
+        apagarDadosDoSalao();
+        jdbc.update("delete from notificacao where barbearia_id = ?", b);
+        jdbc.update("delete from profissional where barbearia_id = ?", b); // horários dos profissionais vão junto
+        jdbc.update("delete from horario_funcionamento where barbearia_id = ?", b);
+        // apagar o usuário apaga junto o dono_barbearia / funcionario e as sessões (ON DELETE CASCADE)
+        jdbc.update("delete from usuario where id in (select id from funcionario where barbearia_id = ?)", b);
+        jdbc.update("delete from usuario where id in (select id from dono_barbearia where barbearia_id = ?)", b);
+        jdbc.update("delete from barbearia where id = ?", b); // as fotos da galeria vão junto
+    }
+
+    private void apagarDadosDoSalao() {
         UUID b = TenantContext.require();
         String agendamentos = "(select id from agendamento where barbearia_id = ?)";
         jdbc.update("delete from notificacao where agendamento_id in " + agendamentos, b);
@@ -62,20 +83,18 @@ public class ContaDoPainelService {
         auditoriaService.registrar(AcaoAuditoria.PORTAL_OCULTADO, "Dados do salão apagados pelo dono");
     }
 
-    /**
-     * Encerra a conta: apaga os dados do salão, a equipe, os horários, as fotos, a conta do dono (com as sessões)
-     * e a barbearia. Fica só o registro da auditoria, que não guarda dados pessoais.
-     */
-    @Transactional
-    public void encerrarConta() {
-        UUID b = TenantContext.require();
-        apagarDados();
-        jdbc.update("delete from notificacao where barbearia_id = ?", b);
-        jdbc.update("delete from profissional where barbearia_id = ?", b); // horários dos profissionais vão junto
-        jdbc.update("delete from horario_funcionamento where barbearia_id = ?", b);
-        // apagar o usuário apaga junto o dono_barbearia / funcionario e as sessões (ON DELETE CASCADE)
-        jdbc.update("delete from usuario where id in (select id from funcionario where barbearia_id = ?)", b);
-        jdbc.update("delete from usuario where id in (select id from dono_barbearia where barbearia_id = ?)", b);
-        jdbc.update("delete from barbearia where id = ?", b); // as fotos da galeria vão junto
+    // ações que não dá para desfazer pedem a senha de quem está logado (D2)
+    private void conferirSenha(String senha) {
+        Usuario usuario = usuarioLogado();
+        if (senha == null || !passwordEncoder.matches(senha, usuario.getSenhaHash())) {
+            throw ApiException.invalido("A senha está incorreta.");
+        }
+    }
+
+    private Usuario usuarioLogado() {
+        UUID usuarioId = UsuarioLogado.usuarioId();
+        Usuario usuario = usuarioId == null ? null : usuarioRepository.findById(usuarioId).orElse(null);
+        if (usuario == null) throw ApiException.naoAutorizado("Faça login para continuar.");
+        return usuario;
     }
 }
