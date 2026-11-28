@@ -106,7 +106,8 @@ public class CalendarioDaAgendaService {
         novo.setProfissional(p);
         novo.setData(data);
         novo.setHoraInicio(inicio);
-        novo.setHoraFim(inicio.plusHours(1)); // a agenda do funcionário anda de hora em hora
+        // a agenda anda de hora em hora; o descanso dura o que o administrador escolheu (D8) e o resto da hora fica livre
+        novo.setHoraFim(inicio.plusMinutes(p.getBarbearia().getDescansoMinutos()));
         novo.setMotivo(MOTIVO_DESCANSO);
         bloqueioRepository.save(novo);
     }

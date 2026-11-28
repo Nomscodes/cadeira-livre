@@ -129,6 +129,21 @@ class CalendarioDaAgendaServiceTest {
     }
 
     @Test
+    void descansoUsaADuracaoEscolhidaPeloAdministrador() {
+        // D8: o salão configurou descanso de 30 minutos; das 15:30 às 16:00 o horário volta a ficar livre
+        barbearia.setDescansoMinutos(30);
+        LocalDate dia = LocalDate.of(2026, 11, 17);
+        when(bloqueioRepository.findAllByBarbeariaIdAndData(barbearia.getId(), dia)).thenReturn(List.of());
+
+        service.marcarDescanso(dia, "15:00", true);
+
+        ArgumentCaptor<BloqueioHorario> salvo = ArgumentCaptor.forClass(BloqueioHorario.class);
+        verify(bloqueioRepository).save(salvo.capture());
+        assertEquals(LocalTime.of(15, 0), salvo.getValue().getHoraInicio());
+        assertEquals(LocalTime.of(15, 30), salvo.getValue().getHoraFim());
+    }
+
+    @Test
     void desmarcarDescansoApagaOBloqueioDaquelaHora() {
         LocalDate dia = LocalDate.of(2026, 11, 17);
         BloqueioHorario descanso = bloqueio(naoki, dia, LocalTime.of(15, 0), "Descanso");
