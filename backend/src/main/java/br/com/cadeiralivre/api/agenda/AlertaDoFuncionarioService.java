@@ -2,6 +2,7 @@ package br.com.cadeiralivre.api.agenda;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -24,6 +25,16 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AlertaDoFuncionarioService {
 
+    // lista fechada de motivos (D5): os mesmos da tela "Minha agenda"
+    static final List<String> MOTIVOS = List.of(
+            "Não pagou o último serviço",
+            "Não me sinto seguro(a) com esse cliente",
+            "Cliente agressivo",
+            "Outro (descrever abaixo)");
+    static final int LIMITE_DESCRICAO = 300;
+    // tamanho da coluna notificacao.texto (V18)
+    static final int LIMITE_TEXTO = 500;
+
     private final AgendaService agendaService;
     private final AgendamentoRepository agendamentoRepository;
     private final NotificacaoRepository notificacaoRepository;
@@ -35,7 +46,10 @@ public class AlertaDoFuncionarioService {
         String m = motivo == null ? "" : motivo.trim();
         String d = descricao == null ? "" : descricao.trim();
         if (m.isEmpty()) throw ApiException.invalido("Escolha o motivo do alerta.");
-        if (m.length() > 100 || d.length() > 300) throw ApiException.invalido("O alerta ficou grande demais.");
+        if (!MOTIVOS.contains(m)) throw ApiException.invalido("Escolha um dos motivos da lista.");
+        if (d.length() > LIMITE_DESCRICAO) {
+            throw ApiException.invalido("A descrição pode ter até " + LIMITE_DESCRICAO + " caracteres.");
+        }
 
         // só dá para alertar sobre um atendimento em que ele trabalha, no salão dele
         Agendamento a = agendamentoId == null ? null : agendamentoRepository
@@ -48,10 +62,16 @@ public class AlertaDoFuncionarioService {
         alerta.setTipo(TipoNotificacao.ALERTA_FUNCIONARIO);
         alerta.setAgendamento(a);
         alerta.setBarbearia(a.getBarbearia()); // vai para o dono (sem profissional)
-        alerta.setTexto(p.getNome() + " sinalizou o cliente " + a.getClienteNome() + ": " + m + "."
-                + (d.isEmpty() ? "" : " " + d));
+        alerta.setTexto(cabeNaColuna(p.getNome() + " sinalizou o cliente " + a.getClienteNome() + ": " + m + "."
+                + (d.isEmpty() ? "" : " " + d)));
         alerta.setRemetente(p.getNome());
         alerta.setCriadaEm(Instant.now(clock));
         notificacaoRepository.save(alerta);
+    }
+
+    // com nomes muito longos o texto passaria de 500 e daria erro no banco: corta o fim com reticências
+    static String cabeNaColuna(String texto) {
+        if (texto.length() <= LIMITE_TEXTO) return texto;
+        return texto.substring(0, LIMITE_TEXTO - 3) + "...";
     }
 }
