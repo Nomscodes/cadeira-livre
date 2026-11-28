@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import Button from './Button'
+import { PasswordInput } from './Field'
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
@@ -50,15 +51,22 @@ export function Modal({ title, onClose, children, narrow }) {
   )
 }
 
-/** Confirmacao simples. Com `requireText`, a pessoa precisa digitar a palavra para liberar o botao. */
-export function ConfirmDialog({ title, message, confirmLabel = 'Confirmar', danger, requireText, onConfirm, onClose }) {
+/**
+ * Confirmacao simples. Com `requireText`, a pessoa precisa digitar a palavra para liberar o botao.
+ * Com `requirePassword`, tambem informa a senha: ela vai para onConfirm(senha) e, se der erro
+ * (ex.: senha incorreta), a mensagem aparece no proprio dialogo.
+ */
+export function ConfirmDialog({ title, message, confirmLabel = 'Confirmar', danger, requireText, requirePassword, onConfirm, onClose }) {
   const [typed, setTyped] = useState('')
+  const [senha, setSenha] = useState('')
+  const [erro, setErro] = useState('')
   const [busy, setBusy] = useState(false)
-  const ok = !requireText || typed.trim().toUpperCase() === requireText.toUpperCase()
+  const ok = (!requireText || typed.trim().toUpperCase() === requireText.toUpperCase()) && (!requirePassword || senha !== '')
 
   const run = async () => {
     setBusy(true)
-    try { await onConfirm() } finally { setBusy(false) }
+    setErro('')
+    try { await onConfirm(senha) } catch (e) { setErro(e.message) } finally { setBusy(false) }
   }
 
   return (
@@ -71,6 +79,13 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Confirmar', dang
             <input id="confirm-typed" type="text" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
           </div>
         )}
+        {requirePassword && (
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label className="field-label" htmlFor="confirm-senha">Sua senha</label>
+            <PasswordInput id="confirm-senha" value={senha} onChange={(e) => { setSenha(e.target.value); setErro('') }} />
+          </div>
+        )}
+        {erro && <div className="box warn" role="alert" style={{ margin: 0 }}>{erro}</div>}
       </div>
       <div className="modal-actions">
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
