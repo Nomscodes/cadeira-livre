@@ -112,8 +112,11 @@ public class ServicoService {
 
     private void preencher(Servico s, ServicoRequest req) {
         s.setNome(req.nome().trim());
-        s.setDescricao(req.descricao());
+        // a tela do painel não manda a descrição: sem ela, a atual continua (antes a edição apagava)
+        if (req.descricao() != null) s.setDescricao(req.descricao().isBlank() ? null : req.descricao().trim());
         s.setPreco(req.preco());
         s.setDuracaoMinutos(req.duracao());
+        // D12: o dono marca ou desmarca o destaque; sem o campo, fica como está
+        if (req.destaque() != null) s.setDestaque(req.destaque());
     }
 }

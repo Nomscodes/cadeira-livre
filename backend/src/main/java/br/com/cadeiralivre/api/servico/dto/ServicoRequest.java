@@ -15,6 +15,7 @@ import jakarta.validation.constraints.Size;
 public record ServicoRequest(
         @NotBlank(message = "informe o nome do serviço") @Size(max = 120) String nome,
 
+        // null = mantém a descrição atual (a tela do painel não tem esse campo); "" apaga
         @Size(max = 500) String descricao,
 
         // pode ser 0 (serviço sem custo), como no front
@@ -29,5 +30,8 @@ public record ServicoRequest(
         Integer duracao,
 
         // profissionais que fazem o serviço; vazio ou null = ninguém por enquanto
-        List<UUID> profissionalIds) {
+        List<UUID> profissionalIds,
+
+        // aparece em "Serviços em destaque" no portal (D12); null = mantém (o serviço novo nasce em destaque)
+        Boolean destaque) {
 }

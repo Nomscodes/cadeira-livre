@@ -2,6 +2,7 @@ package br.com.cadeiralivre.api.servico;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -106,7 +107,7 @@ class ServicoServiceTest {
         when(profissionalRepository.findAllByBarbeariaIdOrderByNome(minhaBarbearia.getId())).thenReturn(List.of(diego, gabriel));
 
         ServicoResponse criado = servicoService.criar(new ServicoRequest("  Corte  ", "Corte na tesoura",
-                new BigDecimal("40.00"), 30, List.of(gabriel.getId())));
+                new BigDecimal("40.00"), 30, List.of(gabriel.getId()), null));
 
         ArgumentCaptor<Servico> salvo = ArgumentCaptor.forClass(Servico.class);
         verify(servicoRepository).save(salvo.capture());
@@ -138,13 +139,49 @@ class ServicoServiceTest {
         when(profissionalRepository.findAllByBarbeariaIdOrderByNome(minhaBarbearia.getId())).thenReturn(List.of(diego, gabriel));
 
         ServicoResponse editado = servicoService.atualizar(corte.getId(),
-                new ServicoRequest("Corte degradê", null, new BigDecimal("50.00"), 40, List.of(gabriel.getId())));
+                new ServicoRequest("Corte degradê", null, new BigDecimal("50.00"), 40, List.of(gabriel.getId()), null));
 
         assertEquals("Corte degradê", corte.getNome());
         assertEquals(40, editado.duracao());
         assertEquals(List.of(gabriel.getId()), editado.profissionalIds());
         assertFalse(diego.getServicos().contains(corte));
         assertTrue(gabriel.getServicos().contains(corte));
+    }
+
+    @Test
+    void editarSemDescricaoEDestaqueMantemOQueJaEstava() {
+        // a tela do painel não manda a descrição nem (antes desta PR) o destaque: nada disso pode sumir
+        Servico corte = servicoExistente("Corte", false);
+        corte.setDescricao("Corte na tesoura");
+        corte.setDestaque(false);
+
+        servicoService.atualizar(corte.getId(), pedido(List.of()));
+
+        assertEquals("Corte na tesoura", corte.getDescricao());
+        assertFalse(corte.isDestaque());
+    }
+
+    @Test
+    void donoMarcaEDesmarcaODestaque() {
+        Servico corte = servicoExistente("Corte", false);
+
+        ServicoResponse desmarcado = servicoService.atualizar(corte.getId(),
+                new ServicoRequest("Corte", null, new BigDecimal("40.00"), 30, List.of(), false));
+        assertFalse(desmarcado.destaque());
+
+        ServicoResponse marcado = servicoService.atualizar(corte.getId(),
+                new ServicoRequest("Corte", null, new BigDecimal("40.00"), 30, List.of(), true));
+        assertTrue(marcado.destaque());
+    }
+
+    @Test
+    void descricaoVaziaApagaADescricao() {
+        Servico corte = servicoExistente("Corte", false);
+        corte.setDescricao("Corte na tesoura");
+
+        servicoService.atualizar(corte.getId(), new ServicoRequest("Corte", "   ", new BigDecimal("40.00"), 30, List.of(), null));
+
+        assertNull(corte.getDescricao());
     }
 
     // ---------- exclusão ----------
@@ -255,6 +292,6 @@ class ServicoServiceTest {
     }
 
     private ServicoRequest pedido(List<UUID> profissionalIds) {
-        return new ServicoRequest("Corte", null, new BigDecimal("40.00"), 30, profissionalIds);
+        return new ServicoRequest("Corte", null, new BigDecimal("40.00"), 30, profissionalIds, null);
     }
 }
