@@ -708,7 +708,7 @@ route('GET', '/agenda', (ctx) => {
     profissional: { id: p.id, nome: nomeProf(p) || p.nome, horarios: p.horarios },
     podeEditar: !!s.funcionariosEditamHorario,
     agendamentos: meus.map((a) => ({
-      id: a.id, data: a.data, hora: a.hora, duracao: a.duracao, cliente: a.clienteNome, servicos: textoItens(a),
+      id: a.id, data: a.data, hora: a.hora, duracao: a.duracao, cliente: a.clienteNome, servicos: textoItens(a), status: statusEfetivo(a),
       colegas: [...new Set(a.itens.map((i) => i.profissionalId))].filter((id) => id !== p.id).map((id) => nomeProf(db().profissionais.find((x) => x.id === id))),
     })),
     descansos: db().descansos.filter((d) => d.profissionalId === p.id && d.data.startsWith(mes)).map(({ data, hora }) => ({ data, hora })),
