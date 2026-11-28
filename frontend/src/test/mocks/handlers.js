@@ -83,10 +83,8 @@ const contaPorEmail = (email) => {
   const e = norm(email).trim()
   return db().usuarios.find((u) => norm(u.email) === e) || db().clientes.find((c) => norm(c.email) === e)
 }
-route('POST', '/auth/recuperar', ({ body }) => {
-  if (!contaPorEmail(body.email)) throw new ApiError(404, 'Este e-mail não está cadastrado.')
-  return null
-})
+// como no backend, responde igual com ou sem conta (não revela quem tem cadastro)
+route('POST', '/auth/recuperar', () => null)
 route('POST', '/auth/recuperar/codigo', ({ body }) => {
   if (String(body.codigo || '').trim() !== CODIGO_TESTE) throw new ApiError(422, 'Código incorreto. Confira o e-mail e tente de novo.')
   return null

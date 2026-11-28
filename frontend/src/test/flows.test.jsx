@@ -173,11 +173,12 @@ describe('login', () => {
     await user.click(await screen.findByRole('link', { name: 'esqueci minha senha' }))
     expect(await screen.findByRole('heading', { name: 'Recuperar senha' })).toBeInTheDocument()
 
-    // e-mail que nao existe oferece o cadastro
+    // e-mail que nao existe recebe a mesma resposta: a tela nao revela quem tem cadastro
     await user.type(screen.getByLabelText('e-mail cadastrado'), 'ninguem@teste.com')
     await user.click(screen.getByRole('button', { name: 'Continuar' }))
-    expect(await screen.findByText('Este e-mail não está cadastrado.', {}, espera)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Tentar outro e-mail' }))
+    expect(await screen.findByText('Se ninguem@teste.com tiver cadastro, enviamos um código de recuperação para ele.', {}, espera)).toBeInTheDocument()
+    expect(screen.queryByText(/não está cadastrado/)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'recomeçar com outro e-mail' }))
 
     // a cliente de teste recebe o codigo e troca a senha
     await user.clear(screen.getByLabelText('e-mail cadastrado'))
