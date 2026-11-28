@@ -611,8 +611,15 @@ route('POST', '/painel/senha', (ctx) => {
   if (!u.apelidos?.length) { u.senha = ctx.body.nova; save() } // contas de teste mantem a senha
   return null
 })
+// como no backend, apagar e encerrar pedem a senha de quem está logado (D2)
+function conferirSenha(u, senha) {
+  if (!senha) throw new ApiError(400, 'Não foi possível ler os dados enviados. Confira o formato do JSON, das datas e dos horários.')
+  if (senha !== u.senha) throw new ApiError(422, 'A senha está incorreta.')
+}
 route('DELETE', '/painel/dados', (ctx) => {
-  const s = salaoDoStaff(requireAdmin(ctx))
+  const u = requireAdmin(ctx)
+  conferirSenha(u, ctx.body?.senha)
+  const s = salaoDoStaff(u)
   db().agendamentos = db().agendamentos.filter((a) => a.salaoId !== s.id)
   db().servicos = db().servicos.filter((v) => v.salaoId !== s.id)
   db().combos = db().combos.filter((c) => c.salaoId !== s.id)
@@ -623,6 +630,7 @@ route('DELETE', '/painel/dados', (ctx) => {
 })
 route('DELETE', '/painel/conta', (ctx) => {
   const u = requireAdmin(ctx)
+  conferirSenha(u, ctx.body?.senha)
   const s = salaoDoStaff(u)
   const id = s.id
   db().saloes = db().saloes.filter((x) => x.id !== id)

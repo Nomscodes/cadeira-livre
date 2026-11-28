@@ -91,13 +91,17 @@ export default function ConfigPage() {
       logout()
     } catch (e) { toast.error(e.message); setDialogo(null) }
   }
-  const apagarDados = async () => {
-    try { await api.delete('/painel/dados', { as: 'staff' }); toast.success('Dados apagados. O portal foi ocultado.'); setSalao((s) => ({ ...s, publico: false })); setDialogo(null) }
-    catch (e) { toast.error(e.message); setDialogo(null) }
+  // pedem a senha do dono (D2); se a senha estiver errada, o erro aparece no próprio diálogo
+  const apagarDados = async (senha) => {
+    await api.delete('/painel/dados', { as: 'staff', body: { senha } })
+    toast.success('Dados apagados. O portal foi ocultado.')
+    setSalao((s) => ({ ...s, publico: false }))
+    setDialogo(null)
   }
-  const encerrar = async () => {
-    try { await api.delete('/painel/conta', { as: 'staff' }); toast.success('Conta encerrada.'); logout() }
-    catch (e) { toast.error(e.message); setDialogo(null) }
+  const encerrar = async (senha) => {
+    await api.delete('/painel/conta', { as: 'staff', body: { senha } })
+    toast.success('Conta encerrada.')
+    logout()
   }
 
   return (
@@ -154,11 +158,11 @@ export default function ConfigPage() {
           message="Você passará a ter acesso de funcionário e precisará entrar novamente. Esta ação só pode ser desfeita pelo novo administrador." />
       )}
       {dialogo === 'dados' && (
-        <ConfirmDialog title="Apagar todos os dados?" danger requireText="APAGAR" confirmLabel="Apagar dados" onClose={() => setDialogo(null)} onConfirm={apagarDados}
+        <ConfirmDialog title="Apagar todos os dados?" danger requireText="APAGAR" requirePassword confirmLabel="Apagar dados" onClose={() => setDialogo(null)} onConfirm={apagarDados}
           message="Serviços, combos, bloqueios e agendamentos serão apagados e o portal ficará oculto. Não dá para desfazer. Exporte o CSV antes se precisar guardar o histórico." />
       )}
       {dialogo === 'conta' && (
-        <ConfirmDialog title="Encerrar conta do salão?" danger requireText="ENCERRAR" confirmLabel="Encerrar conta" onClose={() => setDialogo(null)} onConfirm={encerrar}
+        <ConfirmDialog title="Encerrar conta do salão?" danger requireText="ENCERRAR" requirePassword confirmLabel="Encerrar conta" onClose={() => setDialogo(null)} onConfirm={encerrar}
           message="O portal sai do ar e todos os dados do salão são removidos. Não dá para desfazer." />
       )}
     </div>
