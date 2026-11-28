@@ -569,6 +569,25 @@ describe('configuracoes: campo de antecedencia', () => {
     expect(campo).toHaveValue(4)
     expect(screen.getByText('horas antes do horário marcado')).toBeInTheDocument()
   })
+  it('so oferece o cargo de administrador para quem tem conta de acesso', async () => {
+    window.localStorage.setItem('cl:staff', JSON.stringify({ token: 'mock.staff.u-admin', usuario: { id: 'u-admin', nome: 'Rafael Lima', papel: 'DONO', barbeariaId: 's1', profissionalId: 'p1' } }))
+    // ninguem alem do Rafael criou o login ainda: a lista fica vazia e a tela explica o motivo
+    const view = abrir('/painel/configuracoes')
+    const lista = await screen.findByLabelText('transferir cargo de administrador para', {}, espera)
+    expect(lista).toBeDisabled()
+    expect(screen.getByText(/Só pode receber o cargo quem já tem conta de acesso/)).toBeInTheDocument()
+    view.unmount()
+
+    // depois que a profissional p2 cria a conta com o convite, ela aparece na lista
+    const p2 = getDb().profissionais.find((p) => p.id === 'p2')
+    getDb().usuarios.push({ id: 'u-p2', nome: p2.nome, email: 'p2@teste.com', senha: '12345678', papel: 'funcionario', salaoId: 's1', profissionalId: 'p2' })
+    save()
+    abrir('/painel/configuracoes')
+    const lista2 = await screen.findByLabelText('transferir cargo de administrador para', {}, espera)
+    expect(lista2).toBeEnabled()
+    expect(within(lista2).getByRole('option', { name: p2.nome })).toBeInTheDocument()
+    expect(within(lista2).getAllByRole('option')).toHaveLength(2) // "selecione" + p2
+  })
 })
 
 describe('capa do portal', () => {
