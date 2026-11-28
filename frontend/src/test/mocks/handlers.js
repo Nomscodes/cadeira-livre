@@ -762,9 +762,13 @@ route('PUT', '/agenda/descansos', (ctx) => {
   save()
   return null
 })
+const MOTIVOS_DO_ALERTA = ['Não pagou o último serviço', 'Não me sinto seguro(a) com esse cliente', 'Cliente agressivo', 'Outro (descrever abaixo)']
 route('POST', '/agenda/alertas', (ctx) => {
   const u = requireStaff(ctx)
   if (!ctx.body.motivo) throw new ApiError(422, 'Escolha o motivo do alerta.')
+  // mesmas regras do backend: motivo da lista fechada e descrição de até 300 caracteres
+  if (!MOTIVOS_DO_ALERTA.includes(ctx.body.motivo)) throw new ApiError(422, 'Escolha um dos motivos da lista.')
+  if ((ctx.body.descricao || '').trim().length > 300) throw new ApiError(422, 'A descrição pode ter até 300 caracteres.')
   db().alertas.push({ id: nextId('al'), salaoId: u.salaoId, agendamentoId: ctx.body.agendamentoId, motivo: ctx.body.motivo, descricao: ctx.body.descricao || '' })
   const ag = db().agendamentos.find((a) => a.id === ctx.body.agendamentoId)
   db().notificacoes.push({
