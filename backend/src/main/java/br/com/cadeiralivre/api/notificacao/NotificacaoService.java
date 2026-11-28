@@ -2,8 +2,10 @@ package br.com.cadeiralivre.api.notificacao;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,9 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class NotificacaoService {
+
+    private static final DateTimeFormatter DIA = DateTimeFormatter.ofPattern("dd/MM");
+    private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
 
     private final NotificacaoRepository notificacaoRepository;
     private final Clock clock;
@@ -94,6 +99,27 @@ public class NotificacaoService {
         if (n.getLidaEm() == null) {
             n.setLidaEm(Instant.now(clock));
         }
+    }
+
+    /**
+     * D3: o salão apagou os dados ou encerrou a conta, e o horário do cliente vai ser apagado junto.
+     * O aviso fica sem o agendamento (V21), com o texto já pronto. Quem agendou sem conta não recebe.
+     * Chamar antes de apagar o agendamento (lê os serviços e o salão dele).
+     */
+    @Transactional
+    public void cancelamentoPeloSalao(Agendamento agendamento) {
+        if (agendamento.getCliente() == null) return;
+        String servicos = agendamento.getItens().isEmpty() ? agendamento.getServico().getNome()
+                : agendamento.getItens().stream().map(AgendamentoItem::getNome).distinct()
+                        .collect(Collectors.joining(" + "));
+        String texto = "Seu horário de " + servicos + " em " + agendamento.getData().format(DIA)
+                + " às " + agendamento.getHoraInicio().format(HORA) + " na "
+                + agendamento.getBarbearia().getNomeFantasia() + " foi cancelado pelo salão.";
+
+        Notificacao n = nova(null, TipoNotificacao.HORARIO_CANCELADO_PELO_SALAO);
+        n.setCliente(agendamento.getCliente());
+        n.setTexto(texto.length() <= 500 ? texto : texto.substring(0, 497) + "..."); // coluna texto (V18)
+        notificacaoRepository.save(n);
     }
 
     private Notificacao nova(Agendamento agendamento, TipoNotificacao tipo) {
