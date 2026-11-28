@@ -24,6 +24,11 @@ public record NotificacaoResponse(UUID id, TipoNotificacao tipo, String titulo, 
      */
     public static NotificacaoResponse de(Notificacao n) {
         Agendamento a = n.getAgendamento();
+        // aviso do salão de um horário que já foi apagado (V21): só existe o texto guardado
+        if (a == null) {
+            return new NotificacaoResponse(n.getId(), n.getTipo(), n.getTipo().getTitulo(), n.getTexto(),
+                    null, n.getCriadaEm(), n.getLidaEm() != null);
+        }
         String cliente = a.getClienteNome();
         // todos os itens do atendimento (combo + serviço avulso, um ou mais profissionais), como nos detalhes do modal;
         // agendamento antigo sem itens usa o serviço e o profissional principais
@@ -49,8 +54,8 @@ public record NotificacaoResponse(UUID id, TipoNotificacao tipo, String titulo, 
             case ATENDIMENTO_CONCLUIDO -> "Seu " + servico + " com " + profissional + " foi concluído. Toque para avaliar.";
             case PEDIDO_AVALIACAO -> "A " + a.getBarbearia().getNomeFantasia() + " quer saber como foi seu " + servico
                     + " com " + profissional + ". Toque para avaliar.";
-            // aviso do dono e alerta do funcionário: o texto foi escrito por quem mandou
-            case AVISO_EQUIPE, ALERTA_FUNCIONARIO -> n.getTexto();
+            // aviso do dono, alerta do funcionário e avisos do salão ao cliente: o texto ficou guardado
+            case AVISO_EQUIPE, ALERTA_FUNCIONARIO, HORARIO_CANCELADO_PELO_SALAO, AVISO_DO_SALAO -> n.getTexto();
             case ATENDIMENTO_NA_AGENDA -> cliente + " marcou " + servico + " com você em " + dia + " às " + hora + ".";
             case LEMBRETE_CLIENTE -> servico + " com " + profissional + " em " + dia + " às " + hora
                     + ", na " + a.getBarbearia().getNomeFantasia() + ".";
