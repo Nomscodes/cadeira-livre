@@ -53,12 +53,17 @@ public class RecuperacaoSenhaService {
         this.mostrarCodigoNoLog = mostrarCodigoNoLog;
     }
 
-    /** Passo 1: gera um código de 6 dígitos para a conta do e-mail (pedir de novo substitui o anterior). */
+    /**
+     * Passo 1: gera um código de 6 dígitos para a conta do e-mail (pedir de novo substitui o anterior).
+     * A resposta é a mesma com ou sem conta (D10): assim ninguém descobre quais e-mails têm cadastro.
+     */
     @Transactional
     public void solicitar(String email) {
-        // o contrato do front responde 404 para e-mail que não existe (a tela oferece o cadastro)
-        Usuario usuario = usuarioRepository.findByEmailHash(hashDoEmail(email))
-                .orElseThrow(() -> ApiException.naoEncontrado("Este e-mail não está cadastrado."));
+        Usuario usuario = usuarioRepository.findByEmailHash(hashDoEmail(email)).orElse(null);
+        if (usuario == null) {
+            log.info("Pedido de recuperação de senha para um e-mail sem cadastro.");
+            return;
+        }
 
         String codigo = String.format("%06d", SORTEIO.nextInt(1_000_000));
         Instant agora = Instant.now(clock);

@@ -32,7 +32,7 @@ public class RecuperacaoSenhaController {
             @NotBlank @Size(min = 8, max = 72, message = "A senha precisa ter ao menos 8 caracteres.") String novaSenha) {
     }
 
-    /** Passo 1: gera o código (404 se o e-mail não estiver cadastrado). */
+    /** Passo 1: gera o código. Responde igual com ou sem conta, para não revelar quem tem cadastro. */
     @PostMapping
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void solicitar(@Valid @RequestBody EmailRequest req) {
