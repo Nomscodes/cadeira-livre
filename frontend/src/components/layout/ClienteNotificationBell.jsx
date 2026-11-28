@@ -12,6 +12,8 @@ const TIPOS_CLIENTE = {
   ATENDIMENTO_CONCLUIDO: 'avaliação',
   PEDIDO_AVALIACAO: 'avaliação',
   LEMBRETE_CLIENTE: 'lembrete',
+  HORARIO_CANCELADO_PELO_SALAO: 'cancelado',
+  AVISO_DO_SALAO: 'aviso',
 }
 
 /** Sino da area do cliente: lista os avisos dele; clicar marca como lido e leva para a tela certa. */
