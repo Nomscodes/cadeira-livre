@@ -32,7 +32,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import br.com.cadeiralivre.api.agendamento.Agendamento;
 import br.com.cadeiralivre.api.agendamento.AgendamentoRepository;
 import br.com.cadeiralivre.api.agendamento.StatusAgendamento;
+import br.com.cadeiralivre.api.barbearia.Barbearia;
 import br.com.cadeiralivre.api.common.exception.ApiException;
+import br.com.cadeiralivre.api.notificacao.NotificacaoService;
+import br.com.cadeiralivre.api.notificacao.TipoNotificacao;
 import br.com.cadeiralivre.api.usuario.dto.ContaResponse;
 import br.com.cadeiralivre.api.usuario.dto.ExclusaoContaRequest;
 import br.com.cadeiralivre.api.usuario.dto.TrocaSenhaRequest;
@@ -47,6 +50,8 @@ class ContaClienteServiceTest {
     private AgendamentoRepository agendamentoRepository;
 
     @Mock
+    private NotificacaoService notificacaoService;
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     private ContaClienteService contaClienteService;
@@ -59,7 +64,7 @@ class ContaClienteServiceTest {
     @BeforeEach
     void preparar() {
         // o Clock não é mock, por isso o service é criado na mão
-        contaClienteService = new ContaClienteService(clienteRepository, agendamentoRepository, passwordEncoder, relogio);
+        contaClienteService = new ContaClienteService(clienteRepository, agendamentoRepository, notificacaoService, passwordEncoder, relogio);
 
         gabriel = new Cliente();
         gabriel.setId(UUID.randomUUID());
@@ -182,6 +187,50 @@ class ContaClienteServiceTest {
         assertEquals(StatusAgendamento.CANCELADO, aprovadoAmanha.getStatus());
         assertEquals(StatusAgendamento.CANCELADO, pendenteAmanha.getStatus());
         assertEquals("Cliente removido", aprovadoAmanha.getClienteNome());
+        // o salão é avisado dos dois; a equipe só do que já estava aprovado na agenda
+        verify(notificacaoService).paraDono(aprovadoAmanha, TipoNotificacao.CANCELAMENTO);
+        verify(notificacaoService).paraDono(pendenteAmanha, TipoNotificacao.CANCELAMENTO);
+        verify(notificacaoService).paraEquipe(aprovadoAmanha, TipoNotificacao.CANCELAMENTO);
+        verify(notificacaoService, never()).paraEquipe(pendenteAmanha, TipoNotificacao.CANCELAMENTO);
+    }
+
+    @Test
+    void horarioForaDoPrazoDeCancelamentoBloqueiaAExclusao() {
+        logarComoGabriel();
+        when(passwordEncoder.matches("senhaAtual1", "hash-da-senha-atual")).thenReturn(true);
+        // agora são 09:00 e o salão pede 4 horas: o horário das 12:00 de hoje já não pode ser cancelado
+        Agendamento hojeAoMeioDia = agendamento(LocalDate.of(2026, 11, 10), LocalTime.of(12, 0), StatusAgendamento.APROVADO);
+        Agendamento amanha = agendamento(LocalDate.of(2026, 11, 11), StatusAgendamento.PENDENTE);
+        when(agendamentoRepository.findAllByClienteIdOrderByDataDescHoraInicioDesc(gabriel.getId()))
+                .thenReturn(List.of(amanha, hojeAoMeioDia));
+
+        ApiException erro = assertThrows(ApiException.class,
+                () -> contaClienteService.excluirConta(new ExclusaoContaRequest("senhaAtual1")));
+
+        assertEquals(422, erro.getStatus().value());
+        assertEquals("Você tem um horário em 10/11/2026 às 12:00 que não pode mais ser cancelado. "
+                + "Exclua a conta depois do atendimento ou fale com o salão.", erro.getMessage());
+        // nada muda: nem a conta, nem os horários, nem avisos
+        verify(clienteRepository, never()).delete(any());
+        assertEquals(StatusAgendamento.APROVADO, hojeAoMeioDia.getStatus());
+        assertEquals(StatusAgendamento.PENDENTE, amanha.getStatus());
+        assertEquals("Gabriel Naoki", amanha.getClienteNome());
+        verifyNoInteractions(notificacaoService);
+    }
+
+    @Test
+    void horarioExatamenteNoLimiteDoPrazoAindaDeixaExcluir() {
+        logarComoGabriel();
+        when(passwordEncoder.matches("senhaAtual1", "hash-da-senha-atual")).thenReturn(true);
+        // 13:00 com prazo de 4 horas: o limite é 09:00, que é agora
+        Agendamento noLimite = agendamento(LocalDate.of(2026, 11, 10), LocalTime.of(13, 0), StatusAgendamento.APROVADO);
+        when(agendamentoRepository.findAllByClienteIdOrderByDataDescHoraInicioDesc(gabriel.getId()))
+                .thenReturn(List.of(noLimite));
+
+        contaClienteService.excluirConta(new ExclusaoContaRequest("senhaAtual1"));
+
+        verify(clienteRepository).delete(gabriel);
+        assertEquals(StatusAgendamento.CANCELADO, noLimite.getStatus());
     }
 
     @Test
@@ -211,14 +260,21 @@ class ContaClienteServiceTest {
     }
 
     private Agendamento agendamento(LocalDate data, StatusAgendamento status) {
+        return agendamento(data, LocalTime.of(10, 0), status);
+    }
+
+    private Agendamento agendamento(LocalDate data, LocalTime hora, StatusAgendamento status) {
+        Barbearia salao = new Barbearia();
+        salao.setCancelamentoHoras(4);
         Agendamento a = new Agendamento();
+        a.setBarbearia(salao);
         a.setId(UUID.randomUUID());
         a.setCliente(gabriel);
         a.setClienteNome("Gabriel Naoki");
         a.setClienteTelefone("62981234567");
         a.setData(data);
-        a.setHoraInicio(LocalTime.of(10, 0));
-        a.setHoraFim(LocalTime.of(10, 30));
+        a.setHoraInicio(hora);
+        a.setHoraFim(hora.plusMinutes(30));
         a.setStatus(status);
         return a;
     }
